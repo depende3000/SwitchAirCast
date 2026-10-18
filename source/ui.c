@@ -278,16 +278,27 @@ static SDL_Color with_alpha(SDL_Color c, float a) {
 }
 
 /* AirPlay-style mark: a screen with a triangle at its base, on an accent tile */
+/* Console grip: rounded on the outer side, square where it meets the screen. */
+static void fill_grip(float x, float y, float w, float h, bool left, SDL_Color c) {
+    fill_round_rect(x, y, w, h, w * 0.5f, c);
+    fill_rect(left ? x + w * 0.5f : x, y, w * 0.5f, h, c);
+}
+
+/* App logo: a console (screen between two grips) with the cast triangle below. */
 static void draw_logo(float x, float y, float size) {
     fill_round_rect(x, y, size, size, size * 0.24f, COL_ACCENT);
-    float sx = x + size * 0.2f, sy = y + size * 0.22f, sw = size * 0.6f, sh = size * 0.42f;
-    float t = size * 0.07f;
-    fill_round_rect(sx, sy, sw, sh, size * 0.06f, COL_WHITE);
-    fill_round_rect(sx + t, sy + t, sw - 2 * t, sh - 2 * t, size * 0.03f, COL_ACCENT);
+    const float top = 0.23f, h = 0.34f, gw = 0.10f, gap = 0.022f, sw = 0.54f, t = 0.05f;
+    const float lx = (1.0f - (2 * gw + 2 * gap + sw)) / 2.0f, sx = lx + gw + gap, rx = sx + sw + gap;
+    fill_grip(x + lx * size, y + top * size, gw * size, h * size, true, COL_WHITE);
+    fill_grip(x + rx * size, y + top * size, gw * size, h * size, false, COL_WHITE);
+    fill_round_rect(x + sx * size, y + top * size, sw * size, h * size, 0.03f * size, COL_WHITE);
+    fill_round_rect(x + (sx + t) * size, y + (top + t) * size, (sw - 2 * t) * size, (h - 2 * t) * size,
+                    0.015f * size, COL_ACCENT);
     /* gap in the bottom edge where the triangle sits */
-    fill_rect(x + size * 0.36f, sy + sh - t - 1.0f / scale, size * 0.28f, t + 2.0f / scale, COL_ACCENT);
-    fill_triangle(x + size * 0.5f, y + size * 0.55f, x + size * 0.32f, y + size * 0.8f,
-                  x + size * 0.68f, y + size * 0.8f, COL_WHITE);
+    fill_rect(x + 0.38f * size, y + (top + h - t) * size - 1.0f / scale, 0.24f * size, t * size + 2.0f / scale,
+              COL_ACCENT);
+    fill_triangle(x + 0.5f * size, y + (top + h - 0.05f) * size, x + 0.35f * size, y + (top + h + 0.21f) * size,
+                  x + 0.65f * size, y + (top + h + 0.21f) * size, COL_WHITE);
 }
 
 static void draw_spinner(float cx, float cy, float r, unsigned long now_ms) {
@@ -860,5 +871,5 @@ void ui_draw_app_icon(int size) {
     frame_no++;
     shift_x = shift_y = 0.0f;
     draw_background();
-    draw_logo(BASE_H * 0.18f, BASE_H * 0.18f, BASE_H * 0.64f);
+    draw_logo(BASE_H * 0.08f, BASE_H * 0.08f, BASE_H * 0.84f);
 }
