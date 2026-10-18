@@ -1,0 +1,18 @@
+nvtegra H.264: add long-term references to the DPB list, not short_ref[i]
+
+The second loop in nvtegra_h264_prepare_frame_setup() checks h->long_ref[i]
+but stores h->short_ref[i], which is NULL (or the wrong picture) when the
+stream uses long-term reference frames, as iOS screen mirroring does. The
+NULL entry is then dereferenced (hwaccel_picture_private), crashing the app.
+
+--- a/libavcodec/nvtegra_h264.c
++++ b/libavcodec/nvtegra_h264.c
+@@ -281,7 +281,7 @@
+     max = FFMIN(16, FF_ARRAY_ELEMS(refs) - num_refs);
+     for (i = 0; i < max; ++i)
+         if (h->long_ref[i])
+-            refs[num_refs++] = h->short_ref[i];
++            refs[num_refs++] = h->long_ref[i];
+ 
+     /* Add all frames with an already allocated DPB index to our ref list */
+     for (i = 0; i < num_refs; ++i) {

@@ -1,0 +1,100 @@
+# Desktop Linux build of SwitchAirCast, used for development and testing.
+#
+#   make -f Makefile.linux            build build/linux/switchcast
+#   make -f Makefile.linux hostdeps   build the static mbedtls/libsodium/SDL2_ttf it links against
+#
+# Needs SDL2, FFmpeg (libavcodec, libavutil, libswresample, libswscale),
+# freetype2 and harfbuzz development files from the system.
+
+BUILD    := build/linux
+HOSTDEPS := $(CURDIR)/build/hostdeps
+PREFIX   := $(HOSTDEPS)/prefix
+
+SRCDIRS  := source lib/airplay lib/airplay/playfair lib/airplay/llhttp lib/airplay/mdnsd \
+            lib/plist/src lib/plist/libcnary
+INCDIRS  := source lib/airplay lib/airplay/playfair lib/airplay/llhttp \
+            lib/plist/include lib/plist/libcnary/include lib/plist/src
+
+SRCS     := $(foreach d,$(SRCDIRS),$(wildcard $(d)/*.c))
+OBJS     := $(patsubst %.c,$(BUILD)/%.o,$(SRCS))
+DEPS     := $(OBJS:.o=.d)
+
+PKGS     := sdl2 libavformat libavcodec libswresample libswscale libavutil freetype2 harfbuzz
+
+CFLAGS   := -O2 -g -Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-but-set-variable \
+            -Wno-parentheses -Wno-format-truncation -MMD -MP \
+            -D_GNU_SOURCE -DHAVE_STRNDUP -DHAVE_MEMMEM -DHAVE_GMTIME_R -DHAVE_LOCALTIME_R \
+            -DPACKAGE_VERSION=\"2.8.0\" -DPLIST_210 -DPLIST_230 -DSWITCHCAST_VERSION=\"1.0.0\" \
+            $(addprefix -I,$(INCDIRS)) -I$(PREFIX)/include -I$(PREFIX)/include/SDL2 \
+            $(shell pkg-config --cflags $(PKGS))
+LDLIBS   := $(PREFIX)/lib/libSDL2_ttf.a $(PREFIX)/lib/libmbedcrypto.a $(PREFIX)/lib/libsodium.a \
+            $(shell pkg-config --libs $(PKGS)) -lpthread -lm
+
+all: $(BUILD)/switchcast
+
+$(BUILD)/switchcast: $(OBJS)
+	$(CC) -o $@ $^ $(LDLIBS)
+
+$(BUILD)/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+LIB_OBJS := $(filter $(BUILD)/lib/%,$(OBJS))
+
+# offscreen screenshots of every UI screen
+$(BUILD)/ui_preview: $(BUILD)/tests/ui_preview.o $(BUILD)/source/ui.o $(BUILD)/source/i18n.o $(BUILD)/source/platform.o
+	$(CC) -o $@ $^ $(LDLIBS)
+
+# icon.jpg for the homebrew menu
+$(BUILD)/make_icon: $(BUILD)/tests/make_icon.o $(BUILD)/source/ui.o $(BUILD)/source/i18n.o $(BUILD)/source/platform.o
+	$(CC) -o $@ $^ $(LDLIBS)
+
+# crypto backend self-test (diff its output against the OpenSSL backend)
+$(BUILD)/crypto_test: $(BUILD)/tests/crypto_test.o $(BUILD)/lib/airplay/crypto.o $(BUILD)/lib/airplay/utils.o
+	$(CC) -o $@ $^ $(LDLIBS)
+
+# simulated AirPlay sender that mirrors a test video to a running receiver
+$(BUILD)/fake_sender: $(BUILD)/tests/fake_sender.o $(LIB_OBJS)
+	$(CC) -o $@ $^ $(LDLIBS)
+
+# simulated YouTube app casting an HLS video with AirPlay
+$(BUILD)/fake_youtube: $(BUILD)/tests/fake_youtube.o $(LIB_OBJS)
+	$(CC) -o $@ $^ $(LDLIBS)
+
+# media player without the AirPlay layer
+$(BUILD)/player_test: $(BUILD)/tests/player_test.o $(BUILD)/source/player.o $(BUILD)/source/video.o \
+		$(BUILD)/source/audio.o $(BUILD)/source/platform.o
+	$(CC) -o $@ $^ $(LDLIBS)
+
+# HLS playlist rewriting (includes player.c to reach its static helpers)
+$(BUILD)/trim_test: tests/trim_test.c source/player.c $(BUILD)/source/video.o $(BUILD)/source/audio.o \
+		$(BUILD)/source/platform.o
+	$(CC) $(CFLAGS) -o $@ tests/trim_test.c $(BUILD)/source/video.o $(BUILD)/source/audio.o \
+		$(BUILD)/source/platform.o $(LDLIBS)
+
+tests: $(BUILD)/trim_test $(BUILD)/player_test $(BUILD)/fake_youtube $(BUILD)/ui_preview $(BUILD)/make_icon $(BUILD)/crypto_test $(BUILD)/fake_sender
+
+clean:
+	rm -rf $(BUILD)
+
+MBEDTLS_VER := 2.28.10
+SODIUM_VER  := 1.0.20
+TTF_VER     := 2.22.0
+
+hostdeps:
+	mkdir -p $(HOSTDEPS)/src
+	cd $(HOSTDEPS)/src && \
+	  curl -sL -o mbedtls.tgz https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v$(MBEDTLS_VER).tar.gz && \
+	  curl -sL -o sodium.tgz https://github.com/jedisct1/libsodium/releases/download/$(SODIUM_VER)-RELEASE/libsodium-$(SODIUM_VER).tar.gz && \
+	  curl -sL -o ttf.tgz https://github.com/libsdl-org/SDL_ttf/releases/download/release-$(TTF_VER)/SDL2_ttf-$(TTF_VER).tar.gz && \
+	  tar xzf mbedtls.tgz && tar xzf sodium.tgz && tar xzf ttf.tgz
+	$(MAKE) -C $(HOSTDEPS)/src/mbedtls-$(MBEDTLS_VER) lib && \
+	  $(MAKE) -C $(HOSTDEPS)/src/mbedtls-$(MBEDTLS_VER) DESTDIR=$(PREFIX) install
+	cd $(HOSTDEPS)/src/libsodium-$(SODIUM_VER) && ./configure --prefix=$(PREFIX) --disable-shared --with-pic && \
+	  $(MAKE) && $(MAKE) install
+	cd $(HOSTDEPS)/src/SDL2_ttf-$(TTF_VER) && ./configure --prefix=$(PREFIX) --disable-shared --enable-static \
+	  --disable-freetype-builtin --disable-harfbuzz-builtin && $(MAKE) && $(MAKE) install
+
+.PHONY: all clean hostdeps tests
+
+-include $(DEPS)
