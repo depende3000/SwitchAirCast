@@ -155,5 +155,5 @@ Mac and Safari are trademarks of Apple Inc. Nintendo Switch is a trademark of Ni
 
 AI was used as a tool in developing SwitchAirCast. Much of the code, the tests and the
 documentation were written with [Claude Code](https://claude.com/claude-code), Anthropic's AI
-coding assistant, under the direction of the author, who tested every build on real Switch
-consoles with iPhone and Mac.
+coding assistant, under the direction of the author, who tested it on real Switch consoles
+with iPhone and Mac.
