@@ -311,11 +311,19 @@ static void audio_remote_control_id(void *cls, const char *dacp_id, const char *
  * iPhones and iPads connect without a code. A Mac asks for a one-time code before it
  * sends video (pair-pin-start): the code is shown on screen until it is used. */
 
-#define PIN_SHOW_MS 120000UL
+/* hidden sooner when the Mac finishes or fails pairing, or a button is pressed */
+#define PIN_SHOW_MS 60000UL
 
 static uint64_t pin_shown_ms = 0;
 
+static void clear_pin(void);
+
+/* pin "" means the pairing finished or failed: stop showing the code */
 static void display_pin(void *cls, char *pin) {
+    if (!pin || !pin[0]) {
+        clear_pin();
+        return;
+    }
     pthread_mutex_lock(&mutex);
     bool same = !strcmp(status.pin, pin);
     snprintf(status.pin, sizeof(status.pin), "%s", pin);
@@ -329,6 +337,10 @@ static void clear_pin(void) {
     status.pin[0] = '\0';
     pin_shown_ms = 0;
     pthread_mutex_unlock(&mutex);
+}
+
+void receiver_dismiss_pin(void) {
+    clear_pin();
 }
 
 static void register_client(void *cls, const char *device_id, const char *pk_str, const char *name) {
@@ -495,7 +507,8 @@ bool receiver_start(const config_t *cfg, const char *name, char *err, size_t err
     dnssd_set_airplay_features(dnssd, 0, cfg->video_casting ? 1 : 0);  /* AirPlay video (URL) playback */
     dnssd_set_airplay_features(dnssd, 4, cfg->video_casting ? 1 : 0);  /* HLS */
     dnssd_set_airplay_features(dnssd, 42, 0);  /* H.265 screen mirroring */
-    dnssd_set_airplay_features(dnssd, 27, 0);  /* legacy (PIN) pairing */
+    /* bit 27 (legacy pairing) stays on: without it a Mac asks for a code (pair-pin-start)
+     * but then gives up without showing the box to type it in */
 
     raop_callbacks_t cbs;
     memset(&cbs, 0, sizeof(cbs));

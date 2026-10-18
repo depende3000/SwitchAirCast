@@ -42,7 +42,13 @@ enum {
 typedef enum {
     ACT_NONE, ACT_OTHER, ACT_QUIT, ACT_SETTINGS, ACT_STATS, ACT_SCREEN_OFF, ACT_ROTATE,
     ACT_BACK, ACT_SELECT, ACT_LEFT, ACT_RIGHT, ACT_UP, ACT_DOWN,
+    ACT_STICK,  /* a stick pushed: does nothing but counts as touching the console */
 } action_t;
+
+/* how far a stick must move (of 32767) to count, and how far back to re-arm */
+#define STICK_PUSH 16000
+#define STICK_RELEASE 8000
+#define STICK_AXES 8
 
 /* how long the playback controls stay up after a button press */
 #define OSD_MS 3000
@@ -355,6 +361,7 @@ int main(int argc, char **argv) {
 
     platform_set_keep_awake(true);
 
+    bool stick_pushed[STICK_AXES] = { false };
     while (running) {
         SDL_Event ev;
         bool retry = false;
@@ -397,6 +404,18 @@ int main(int argc, char **argv) {
                 default: act = ACT_OTHER; break;
                 }
                 break;
+            case SDL_JOYAXISMOTION:
+                if (ev.jaxis.axis < STICK_AXES) {
+                    int v = ev.jaxis.value < 0 ? -ev.jaxis.value : ev.jaxis.value;
+                    bool *pushed = &stick_pushed[ev.jaxis.axis];
+                    if (!*pushed && v > STICK_PUSH) {
+                        *pushed = true;
+                        act = ACT_STICK;
+                    } else if (*pushed && v < STICK_RELEASE) {
+                        *pushed = false;
+                    }
+                }
+                break;
             case SDL_JOYDEVICEADDED:
                 SDL_JoystickOpen(ev.jdevice.which);
                 break;
@@ -410,6 +429,13 @@ int main(int argc, char **argv) {
             if (model.screen_off) {
                 model.screen_off = false;
                 platform_set_backlight(true);
+                continue;
+            }
+
+            /* any button hides the pairing code (+ still quits) */
+            if (model.rx.pin[0] && act != ACT_QUIT) {
+                receiver_dismiss_pin();
+                model.rx.pin[0] = '\0';
                 continue;
             }
 
@@ -430,6 +456,8 @@ int main(int argc, char **argv) {
 
             bool video = started && model.rx.state == RECEIVER_VIDEO;
             bool picture = started && (model.rx.state == RECEIVER_VIDEO || model.rx.state == RECEIVER_MIRRORING);
+            /* touching the console during a cast: remind that - opens the settings */
+            if (picture && act != ACT_SETTINGS && act != ACT_QUIT) model.options_hint_ms = now;
             switch (act) {
             case ACT_QUIT:
                 running = false;
@@ -437,6 +465,7 @@ int main(int argc, char **argv) {
             case ACT_SETTINGS:
                 model.settings_open = true;
                 model.settings_index = 0;
+                model.options_hint_ms = 0;
                 break;
             case ACT_SCREEN_OFF:
                 model.screen_off = true;

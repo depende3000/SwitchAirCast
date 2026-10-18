@@ -52,6 +52,9 @@ void receiver_get_status(receiver_status_t *st);
 /* Disconnects the current device. */
 void receiver_disconnect(void);
 
+/* Hides the pairing code (the user pressed a button). */
+void receiver_dismiss_pin(void);
+
 /* Stops the AirPlay video being played. */
 void receiver_stop_video(void);
 

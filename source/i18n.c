@@ -89,6 +89,8 @@ static const char *const en[S_COUNT] = {
     [S_ROTATION_TOAST_RIGHT] = "Vertical mode: rotated right",
     [S_PIN_TITLE] = "AirPlay code",
     [S_PIN_HINT] = "Type this code on your Mac to allow videos",
+    [S_HINT_PRESS] = "Press",
+    [S_HINT_OPEN_SETTINGS] = "to open settings",
 };
 
 static const char *const es[S_COUNT] = {
@@ -164,6 +166,8 @@ static const char *const es[S_COUNT] = {
     [S_ROTATION_TOAST_RIGHT] = "Modo vertical: girado a la derecha",
     [S_PIN_TITLE] = "C\xC3\xB3" "digo de AirPlay",
     [S_PIN_HINT] = "Escribe este c\xC3\xB3" "digo en tu Mac para permitir v\xC3\xAD" "deos",
+    [S_HINT_PRESS] = "Pulsa",
+    [S_HINT_OPEN_SETTINGS] = "para abrir los ajustes",
 };
 
 /* Latin-American Spanish: only the strings that differ from Spain's */
@@ -176,6 +180,7 @@ static const char *const es_419[S_COUNT] = {
     [S_SETTINGS_NOTE] = "La pantalla solo se apaga mientras espera o reproduce m\xC3\xBAsica, nunca durante un video.",
     [S_SCREEN_OFF_TOAST] = "Pantalla apagada: presiona cualquier bot\xC3\xB3n para encenderla",
     [S_PIN_HINT] = "Escribe este c\xC3\xB3" "digo en tu Mac para permitir videos",
+    [S_HINT_PRESS] = "Presiona",
 };
 
 static lang_t current = LANG_EN;

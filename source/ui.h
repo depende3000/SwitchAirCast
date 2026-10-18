@@ -49,6 +49,7 @@ typedef struct {
     unsigned long screen_off_ms;     /* when the screen went off */
     const char *toast;               /* short message (e.g. after rotating), or NULL */
     unsigned long toast_ms;          /* when it was set */
+    unsigned long options_hint_ms;   /* when a button was pressed during a cast (shows "press - for settings"), 0 if never */
 
     /* settings menu */
     bool settings_open;

@@ -438,7 +438,10 @@ raop_handler_pairsetup_pin(raop_conn_t *conn,
             logger_log(raop->logger, LOGGER_ERR, "pair-pin-setup (step 3): client authentication failed\n");
             goto authentication_failed;
         } else {
-            logger_log(raop->logger, LOGGER_DEBUG, "pair-pin-setup success\n");
+            logger_log(raop->logger, LOGGER_INFO, "pair-setup-pin: paired with the client");
+            if (raop->callbacks.display_pin) {
+                raop->callbacks.display_pin(raop->callbacks.cls, "");
+            }
         }
         pairing_session_set_setup_status(conn->session);
         plist_t res_root_node = plist_new_dict();
@@ -452,6 +455,10 @@ raop_handler_pairsetup_pin(raop_conn_t *conn,
         return;
     }
  authentication_failed:;
+    /* the code was used up (or never right): hide it, the client asks again for a new one */
+    if (raop->callbacks.display_pin) {
+        raop->callbacks.display_pin(raop->callbacks.cls, "");
+    }
     http_response_init(response, "RTSP/1.0", 470, "Client Authentication Failure");
 }
 

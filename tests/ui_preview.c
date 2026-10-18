@@ -197,6 +197,21 @@ int main(int argc, char **argv) {
     frame(&m, dir, "18_pin", w, h);
     m.rx.pin[0] = '\0';
 
+    /* the console touched during a cast: the settings reminder, alone and under a toast */
+    m.mirror_started_ms = 0;
+    m.options_hint_ms = m.now_ms - 500;
+    frame(&m, dir, "19_options_hint", w, h);
+    m.mirror_started_ms = m.now_ms - 1000;
+    frame(&m, dir, "20_options_hint_under_toast", w, h);
+    m.mirror_started_ms = 0;
+    m.rotation = 90;
+    m.video_tex = gradient_texture(498, 1080, 60);
+    m.video_w = 498;
+    m.video_h = 1080;
+    frame(&m, dir, "21_options_hint_vertical", w, h);
+    m.rotation = 0;
+    m.options_hint_ms = 0;
+
     ui_shutdown();
     SDL_Quit();
     platform_exit();

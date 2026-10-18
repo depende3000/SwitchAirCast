@@ -348,8 +348,10 @@ static void format_time(char *buf, size_t len, double secs) {
     else snprintf(buf, len, "%d:%02d", s / 60, s % 60);
 }
 
+#define TOAST_MS 4000UL
+
 static void draw_toast(const char *text, unsigned long age_ms) {
-    if (!text || age_ms >= 4000) return;
+    if (!text || age_ms >= TOAST_MS) return;
     char line[TEXT_MAX];
     float a = age_ms < 3000 ? 1.0f : 1.0f - (float) (age_ms - 3000) / 1000.0f;
     fit_text(F_BODY, text, base_w - 120.0f, line, sizeof(line));
@@ -358,6 +360,35 @@ static void draw_toast(const char *text, unsigned long age_ms) {
     fill_round_rect(px, 28.0f, pw, 46.0f, 23.0f, with_alpha((SDL_Color) { 0, 0, 0, 190 }, a));
     fill_circle(px + 24.0f, 51.0f, 5.0f, with_alpha(COL_GREEN, a));
     draw_text_mid(F_BODY, line, px + 38.0f, 51.0f, with_alpha(COL_TEXT, a), ALIGN_LEFT);
+}
+
+static bool toast_visible(const ui_model_t *m) {
+    return (m->toast && m->now_ms - m->toast_ms < TOAST_MS) ||
+           (m->mirror_started_ms && m->now_ms >= m->mirror_started_ms && m->now_ms - m->mirror_started_ms < TOAST_MS);
+}
+
+/* "Press (-) to open settings": shown for a few seconds when the console is touched during
+ * a cast, under the toast if one is up, so people know the cast has options */
+static void draw_options_hint(const ui_model_t *m) {
+    if (!m->options_hint_ms || m->now_ms < m->options_hint_ms) return;
+    unsigned long age = m->now_ms - m->options_hint_ms;
+    if (age >= TOAST_MS) return;
+    float a = age < 3000 ? 1.0f : 1.0f - (float) (age - 3000) / 1000.0f;
+    const char *pre = tr(S_HINT_PRESS), *post = tr(S_HINT_OPEN_SETTINGS);
+    const float rad = 13.0f, gap = 10.0f;
+    float w_pre = text_width(F_BODY, pre), w_post = text_width(F_BODY, post);
+    float pw = 28.0f + w_pre + gap + 2 * rad + gap + w_post + 28.0f, px = (base_w - pw) / 2.0f;
+    float y = toast_visible(m) ? 84.0f : 28.0f, cy = y + 23.0f;
+    fill_round_rect(px, y, pw, 46.0f, 23.0f, with_alpha((SDL_Color) { 0, 0, 0, 190 }, a));
+    float x = px + 28.0f;
+    draw_text_mid(F_BODY, pre, x, cy, with_alpha(COL_TEXT, a), ALIGN_LEFT);
+    x += w_pre + gap;
+    fill_circle(x + rad, cy, rad, with_alpha(COL_BUTTON, a));
+    const char *minus = "\xE2\x88\x92";
+    float bw = text_width(F_SMALL, minus);
+    draw_text_mid(F_SMALL, minus, x + rad - bw / 2.0f, cy, with_alpha(COL_BLACK, a), ALIGN_LEFT);
+    x += 2 * rad + gap;
+    draw_text_mid(F_BODY, post, x, cy, with_alpha(COL_TEXT, a), ALIGN_LEFT);
 }
 
 static const char *client_or(const ui_model_t *m, str_id_t fallback) {
@@ -772,6 +803,7 @@ static bool draw_rotated(const ui_model_t *m, int screen_w, int screen_h) {
     }
     draw_screen(m);
     if (m->toast) draw_toast(m->toast, m->now_ms - m->toast_ms);
+    draw_options_hint(m);
     SDL_SetRenderTarget(ren, NULL);
     set_output(screen_w, screen_h);
     SDL_Rect dst = { (screen_w - tw) / 2, (screen_h - th) / 2, tw, th };
@@ -809,6 +841,7 @@ void ui_draw(const ui_model_t *m) {
     if (!rotated) {
         draw_screen(m);
         if (m->toast) draw_toast(m->toast, m->now_ms - m->toast_ms);
+        if (video) draw_options_hint(m);
     }
     if (m->settings_open) {
         shift_x = shift_y = 0.0f;

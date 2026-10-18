@@ -108,7 +108,7 @@ struct raop_callbacks_s {
     void  (*video_report_size)(void *cls, float *width_source, float *height_source, float *width, float *height);
     void  (*mirror_video_running)(void *cls, bool is_running);
     void  (*report_client_request) (void *cls, char *deviceid, char *model, char *name, bool *admit);
-    void  (*display_pin) (void *cls, char * pin);
+    void  (*display_pin) (void *cls, char * pin);  /* pin "": pairing finished or failed, hide it */
     void  (*register_client) (void *cls, const char *device_id, const char *pk_str, const char *name);
     bool  (*check_register) (void *cls, const char *pk_str);
     const char*  (*passwd) (void *cls, int *len);
