@@ -715,6 +715,15 @@ httpd_start(httpd_t *httpd, unsigned short *port)
     httpd->running = 1;
     httpd->joined = 0;
     THREAD_CREATE(httpd->thread, httpd_thread, httpd);
+    if (!httpd->thread) {
+        logger_log(httpd->logger, LOGGER_ERR, "Could not create the httpd thread");
+        httpd->running = 0;
+        httpd->joined = 1;
+        CLOSESOCKET(httpd->server_fd4);
+        CLOSESOCKET(httpd->server_fd6);
+        MUTEX_UNLOCK(httpd->run_mutex);
+        return -3;
+    }
     MUTEX_UNLOCK(httpd->run_mutex);
 
     return 1;

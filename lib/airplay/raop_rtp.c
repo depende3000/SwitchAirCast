@@ -725,6 +725,7 @@ raop_rtp_start_audio(raop_rtp_t *raop_rtp,  unsigned short *control_rport, unsig
     raop_rtp->joined = 0;
 
     THREAD_CREATE(raop_rtp->thread, raop_rtp_thread_udp, raop_rtp);
+    if (!raop_rtp->thread) logger_log(raop_rtp->logger, LOGGER_ERR, "raop_rtp_thread_udp: could not create thread");
     MUTEX_UNLOCK(raop_rtp->run_mutex);
 }
 

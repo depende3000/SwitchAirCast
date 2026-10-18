@@ -896,6 +896,7 @@ raop_ntp_start(raop_ntp_t *raop_ntp, unsigned short *timing_lport)
     raop_ntp->joined = 0;
     
     THREAD_CREATE(raop_ntp->thread, raop_ntp_thread, raop_ntp);
+    if (!raop_ntp->thread) logger_log(raop_ntp->logger, LOGGER_ERR, "raop_ntp_thread: could not create thread");
     MUTEX_UNLOCK(raop_ntp->run_mutex);
 }
 

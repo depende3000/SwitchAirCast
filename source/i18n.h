@@ -87,6 +87,8 @@ typedef enum {
     S_ROTATION_TOAST_OFF,
     S_ROTATION_TOAST_LEFT,
     S_ROTATION_TOAST_RIGHT,
+    S_PIN_TITLE,
+    S_PIN_HINT,
     S_COUNT
 } str_id_t;
 

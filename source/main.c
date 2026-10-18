@@ -544,6 +544,14 @@ int main(int argc, char **argv) {
                 }
             }
             last_state = model.rx.state;
+            /* a Mac waits for its pairing code: it has to be visible */
+            if (model.rx.pin[0]) {
+                last_activity = now;
+                if (model.screen_off) {
+                    model.screen_off = false;
+                    platform_set_backlight(true);
+                }
+            }
         }
 
         /* the system turned the panel back on (HOME menu, wake-up, dock change) */

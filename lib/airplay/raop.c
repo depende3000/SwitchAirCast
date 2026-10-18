@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <time.h>
 
 #include "raop.h"
 #include "raop_rtp.h"
@@ -76,6 +77,7 @@ struct raop_s {
 
      /* for temporary storage of pin during pair-pin start */
     unsigned short pin;
+    time_t pin_time;  /* when pair-pin-start chose the current random pin */
     bool use_pin;
   
      /* public key as string */
@@ -397,8 +399,8 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
         free(header_str);
     }
     
-    if (client_session_id) {
-        assert(!strcmp(client_session_id, conn->client_session_id));
+    if (client_session_id && conn->client_session_id && strcmp(client_session_id, conn->client_session_id)) {
+        logger_log(raop->logger, LOGGER_WARNING, "X-Apple-Session-ID changed on an open connection");
     }
 
     logger_log(raop->logger, LOGGER_DEBUG, "Handling request %s with URL %s", method, url);

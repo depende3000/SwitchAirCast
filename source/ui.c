@@ -31,8 +31,8 @@
 #define TEXT_CACHE_SIZE 128
 #define TEXT_MAX 192
 
-typedef enum { F_TITLE, F_LARGE, F_HEADING, F_BODY, F_SMALL, F_COUNT } font_id_t;
-static const int font_base_px[F_COUNT] = { 46, 38, 28, 22, 17 };
+typedef enum { F_TITLE, F_LARGE, F_HEADING, F_BODY, F_SMALL, F_HUGE, F_COUNT } font_id_t;
+static const int font_base_px[F_COUNT] = { 46, 38, 28, 22, 17, 96 };
 
 enum { ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT };
 
@@ -654,6 +654,28 @@ static void draw_settings(const ui_model_t *m) {
     draw_hint(hx, hy, "B", tr(S_CLOSE));
 }
 
+/* The code a Mac asks for before it sends video, one digit per box. */
+static void draw_pin(const ui_model_t *m) {
+    char line[TEXT_MAX];
+    fill_rect(-shift_x, -shift_y, base_w, base_h, (SDL_Color) { 0, 0, 0, 170 });
+    const float pw = 760.0f, ph = 350.0f, px = (base_w - pw) / 2.0f, py = (base_h - ph) / 2.0f;
+    SDL_Color panel = pal == &PALETTE_BLACK ? (SDL_Color) { 14, 14, 16, 255 } : COL_CARD;
+    fill_round_rect(px, py, pw, ph, 24.0f, panel);
+    draw_text(F_HEADING, tr(S_PIN_TITLE), base_w / 2.0f, py + 34.0f, COL_TEXT, ALIGN_CENTER);
+
+    int n = (int) strlen(m->rx.pin);
+    const float bw = 120.0f, bh = 150.0f, gap = 24.0f;
+    float bx = (base_w - (bw * (float) n + gap * (float) (n - 1))) / 2.0f, by = py + 96.0f;
+    for (int i = 0; i < n; i++) {
+        char digit[2] = { m->rx.pin[i], '\0' };
+        float x = bx + (bw + gap) * (float) i;
+        fill_round_rect(x, by, bw, bh, 18.0f, with_alpha(COL_ACCENT, 0.22f));
+        draw_text_mid(F_HUGE, digit, x + bw / 2.0f, by + bh / 2.0f, COL_TEXT, ALIGN_CENTER);
+    }
+    fit_text(F_BODY, tr(S_PIN_HINT), pw - 80.0f, line, sizeof(line));
+    draw_text(F_BODY, line, base_w / 2.0f, by + bh + 34.0f, COL_TEXT_DIM, ALIGN_CENTER);
+}
+
 static void draw_screen_off(const ui_model_t *m) {
     clear_black();
     /* a short reminder (visible docked; the panel is dark in handheld mode) */
@@ -791,6 +813,10 @@ void ui_draw(const ui_model_t *m) {
     if (m->settings_open) {
         shift_x = shift_y = 0.0f;
         draw_settings(m);
+    }
+    if (m->rx.pin[0]) {
+        shift_x = shift_y = 0.0f;
+        draw_pin(m);
     }
 }
 

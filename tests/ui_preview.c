@@ -185,6 +185,17 @@ int main(int argc, char **argv) {
     m.screen_off = true;
     m.screen_off_ms = m.now_ms - 500;
     frame(&m, dir, "17_screen_off", w, h);
+    m.screen_off = false;
+
+    /* a Mac asking for its pairing code, over the mirrored picture */
+    m.rx.state = RECEIVER_MIRRORING;
+    strcpy(m.rx.client_name, "MacBook Air");
+    m.video_tex = gradient_texture(1920, 1080, 90);
+    m.video_w = 1920;
+    m.video_h = 1080;
+    strcpy(m.rx.pin, "3846");
+    frame(&m, dir, "18_pin", w, h);
+    m.rx.pin[0] = '\0';
 
     ui_shutdown();
     SDL_Quit();

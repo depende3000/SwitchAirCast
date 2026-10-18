@@ -53,6 +53,16 @@ $(BUILD)/make_icon: $(BUILD)/tests/make_icon.o $(BUILD)/source/ui.o $(BUILD)/sou
 $(BUILD)/crypto_test: $(BUILD)/tests/crypto_test.o $(BUILD)/lib/airplay/crypto.o $(BUILD)/lib/airplay/utils.o
 	$(CC) -o $@ $^ $(LDLIBS)
 
+$(BUILD)/mirror_decrypt_test: $(BUILD)/tests/mirror_decrypt_test.o $(BUILD)/lib/airplay/mirror_buffer.o $(BUILD)/lib/airplay/crypto.o $(BUILD)/lib/airplay/utils.o $(BUILD)/lib/airplay/logger.o
+	$(CC) -o $@ $^ $(LDLIBS)
+
+$(BUILD)/srp_server: $(BUILD)/tests/srp_server.o $(BUILD)/lib/airplay/srp.o $(BUILD)/lib/airplay/crypto.o $(BUILD)/lib/airplay/utils.o
+	$(CC) -o $@ $^ $(LDLIBS)
+
+# a Mac pairing with the on-screen code
+$(BUILD)/fake_mac_pair: $(BUILD)/tests/fake_mac_pair.o $(LIB_OBJS)
+	$(CC) -o $@ $^ $(LDLIBS)
+
 # simulated AirPlay sender that mirrors a test video to a running receiver
 $(BUILD)/fake_sender: $(BUILD)/tests/fake_sender.o $(LIB_OBJS)
 	$(CC) -o $@ $^ $(LDLIBS)
@@ -72,7 +82,7 @@ $(BUILD)/trim_test: tests/trim_test.c source/player.c $(BUILD)/source/video.o $(
 	$(CC) $(CFLAGS) -o $@ tests/trim_test.c $(BUILD)/source/video.o $(BUILD)/source/audio.o \
 		$(BUILD)/source/platform.o $(LDLIBS)
 
-tests: $(BUILD)/trim_test $(BUILD)/player_test $(BUILD)/fake_youtube $(BUILD)/ui_preview $(BUILD)/make_icon $(BUILD)/crypto_test $(BUILD)/fake_sender
+tests: $(BUILD)/trim_test $(BUILD)/player_test $(BUILD)/fake_youtube $(BUILD)/ui_preview $(BUILD)/make_icon $(BUILD)/crypto_test $(BUILD)/mirror_decrypt_test $(BUILD)/srp_server $(BUILD)/fake_mac_pair $(BUILD)/fake_sender
 
 clean:
 	rm -rf $(BUILD)

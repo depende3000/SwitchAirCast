@@ -48,6 +48,8 @@
 
 #define SECOND_IN_NSECS 1000000000UL
 #define SEC SECOND_IN_NSECS
+/* a 4K IDR frame is a few MB; anything far beyond is a corrupt length field */
+#define MAX_MIRROR_PAYLOAD (32 * 1024 * 1024)
 
 /* for MacOS, where SOL_TCP and TCP_KEEPIDLE are not defined */
 #if !defined(SOL_TCP) && defined(IPPROTO_TCP)
@@ -319,6 +321,11 @@ raop_rtp_mirror_thread(void *arg)
 
             /*packet[0:3] contains the payload size */
             int payload_size = byteutils_get_int(packet, 0);
+            if (payload_size < 0 || payload_size > MAX_MIRROR_PAYLOAD) {
+                logger_log(raop_rtp_mirror->logger, LOGGER_ERR, "raop_rtp_mirror: invalid payload size %d", payload_size);
+                conn_reset = true;
+                break;
+            }
             char packet_description[13] = {0};
             char *p = packet_description;
             int n = sizeof(packet_description);
@@ -363,8 +370,13 @@ raop_rtp_mirror_thread(void *arg)
             /* "streaming report" packets have no timestamp in packet[8:15] */
 
             if (payload == NULL) {
-                payload = malloc(payload_size);
+                payload = malloc(payload_size ? payload_size : 1);
                 readstart = 0;
+                if (!payload) {
+                    logger_log(raop_rtp_mirror->logger, LOGGER_ERR, "raop_rtp_mirror: out of memory for a %d byte packet", payload_size);
+                    conn_reset = true;
+                    break;
+                }
             }
 
             while ((int) readstart < payload_size) {
@@ -395,6 +407,10 @@ raop_rtp_mirror_thread(void *arg)
                 // ntp time stamps don't include the SECONDS_FROM_1900_TO_1970, so it's really just
                 // counting nano seconds since last boot.
 
+                if (payload_size == 0) {
+                    /* nothing to decrypt or decode (and no byte to mark as invalid) */
+                    break;
+                }
                 ntp_timestamp_local = raop_ntp_convert_remote_time(raop_rtp_mirror->ntp, ntp_timestamp_remote);
                 if (logger_debug_data) {
                     uint64_t ntp_now = raop_ntp_get_local_time();
@@ -432,12 +448,12 @@ raop_rtp_mirror_thread(void *arg)
                         prepend_sps_pps = false;
                 }
 		
+                if (prepend_sps_pps && !sps_pps) prepend_sps_pps = false;
                 if (prepend_sps_pps) {
-                    assert(sps_pps);
                     payload_out = (unsigned char*) malloc(payload_size + sps_pps_len);
                     if (!payload_out) {
-                        printf("Memory allocation failed (payload_out)\n");
-                        exit(1);
+                        logger_log(raop_rtp_mirror->logger, LOGGER_ERR, "raop_rtp_mirror: out of memory for a %d byte frame", payload_size);
+                        break;
                     }
                     payload_decrypted = payload_out + sps_pps_len;
                     memcpy(payload_out, sps_pps, sps_pps_len);
@@ -446,6 +462,10 @@ raop_rtp_mirror_thread(void *arg)
                 } else {
                     payload_out = (unsigned char*)  malloc(payload_size);
                     payload_decrypted = payload_out;
+                }
+                if (!payload_out) {
+                    logger_log(raop_rtp_mirror->logger, LOGGER_ERR, "raop_rtp_mirror: out of memory for a %d byte frame", payload_size);
+                    break;
                 }
                 // Decrypt data: AES-CTR encryption/decryption  does not change the size of the data
                 mirror_buffer_decrypt(raop_rtp_mirror->buffer, payload, payload_decrypted, payload_size);
@@ -927,6 +947,7 @@ raop_rtp_mirror_start(raop_rtp_mirror_t *raop_rtp_mirror, unsigned short *mirror
     }
 
     THREAD_CREATE(raop_rtp_mirror->thread_mirror, raop_rtp_mirror_thread, raop_rtp_mirror);
+    if (!raop_rtp_mirror->thread_mirror) logger_log(raop_rtp_mirror->logger, LOGGER_ERR, "raop_rtp_mirror_thread: could not create thread");
     MUTEX_UNLOCK(raop_rtp_mirror->run_mutex);
 }
 

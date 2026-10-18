@@ -92,23 +92,28 @@ mirror_buffer_init(logger_t *logger, const unsigned char *aeskey)
 }
 
 void mirror_buffer_decrypt(mirror_buffer_t *mirror_buffer, unsigned char* input, unsigned char* output, int inputLen) {
-    // Start decrypting
+    if (inputLen <= 0) return;
+    // Start decrypting with the keystream left over from the previous packet's last block.
+    // A packet can be shorter than that leftover (tiny frames of a static screen): then it
+    // uses only part of it and the rest stays for the next packet.
+    int used = 0;
     if (mirror_buffer->nextDecryptCount > 0) {//mirror_buffer->nextDecryptCount = 10
-        for (int i = 0; i < mirror_buffer->nextDecryptCount; i++) {
+        used = mirror_buffer->nextDecryptCount < inputLen ? mirror_buffer->nextDecryptCount : inputLen;
+        for (int i = 0; i < used; i++) {
             output[i] = (input[i] ^ mirror_buffer->og[(16 - mirror_buffer->nextDecryptCount) + i]);
         }
+        mirror_buffer->nextDecryptCount -= used;
+        if (mirror_buffer->nextDecryptCount > 0) return;
     }
     // Handling encrypted bytes
-    int encryptlen = ((inputLen - mirror_buffer->nextDecryptCount) / 16) * 16;
+    int encryptlen = ((inputLen - used) / 16) * 16;
     // Aes decryption
     aes_ctr_start_fresh_block(mirror_buffer->aes_ctx);
-    aes_ctr_decrypt(mirror_buffer->aes_ctx, input + mirror_buffer->nextDecryptCount,
-                    input + mirror_buffer->nextDecryptCount, encryptlen);
+    aes_ctr_decrypt(mirror_buffer->aes_ctx, input + used, input + used, encryptlen);
     // Copy to output
-    memcpy(output + mirror_buffer->nextDecryptCount, input + mirror_buffer->nextDecryptCount, encryptlen);
-    // int outputlength = mirror_buffer->nextDecryptCount + encryptlen;
+    memcpy(output + used, input + used, encryptlen);
     // Processing remaining length
-    int restlen = (inputLen - mirror_buffer->nextDecryptCount) % 16;
+    int restlen = (inputLen - used) % 16;
     int reststart = inputLen - restlen;
     mirror_buffer->nextDecryptCount = 0;
     if (restlen > 0) {

@@ -28,9 +28,11 @@
 typedef pthread_t thread_handle_t;
 
 #define THREAD_RETVAL void *
+/* handle is 0 when the thread could not be created (out of threads or memory);
+ * joining it then is a no-op instead of a crash */
 #define THREAD_CREATE(handle, func, arg) \
 	if (pthread_create(&(handle), NULL, func, arg)) handle = 0
-#define THREAD_JOIN(handle) pthread_join(handle, NULL)
+#define THREAD_JOIN(handle) do { if (handle) pthread_join(handle, NULL); } while (0)
 
 typedef pthread_mutex_t mutex_handle_t;
 

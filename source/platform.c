@@ -34,6 +34,44 @@ static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 static FILE *log_file = NULL;
 static char data_dir[512];
 
+/* Keeps the previous run's log (log-previous.txt) so a crash can still be diagnosed
+ * after SwitchAirCast is started again. */
+static void open_log(void) {
+    char path[600], prev[600];
+    snprintf(path, sizeof(path), "%s/log.txt", data_dir);
+    snprintf(prev, sizeof(prev), "%s/log-previous.txt", data_dir);
+    remove(prev);
+    rename(path, prev);
+    log_file = fopen(path, "w");
+}
+
+static void copy_file(const char *from, const char *to) {
+    FILE *in = fopen(from, "rb");
+    if (!in) return;
+    FILE *out = fopen(to, "wb");
+    if (out) {
+        char buf[4096];
+        size_t n;
+        while ((n = fread(buf, 1, sizeof(buf), in)) > 0) fwrite(buf, 1, n, out);
+        fclose(out);
+    }
+    fclose(in);
+}
+
+/* Settings and the receiver identity (device_id: paired senders know the console by
+ * it) move over from the folder used before the rename to SwitchAirCast. */
+static void migrate_old_data(const char *old_dir) {
+    static const char *const files[] = { "config.ini", "device_id" };
+    for (size_t i = 0; i < sizeof(files) / sizeof(files[0]); i++) {
+        char from[600], to[600];
+        struct stat st;
+        snprintf(to, sizeof(to), "%s/%s", data_dir, files[i]);
+        if (stat(to, &st) == 0) continue;
+        snprintf(from, sizeof(from), "%s/%s", old_dir, files[i]);
+        copy_file(from, to);
+    }
+}
+
 #ifdef __SWITCH__
 
 static bool have_nifm = false;
@@ -93,10 +131,17 @@ bool platform_init(void) {
     snprintf(data_dir, sizeof(data_dir), "sdmc:/config/SwitchAirCast");
     mkdir("sdmc:/config", 0777);
     mkdir(data_dir, 0777);
+    migrate_old_data("sdmc:/config/SwitchCast");
+    open_log();
 
-    char path[600];
-    snprintf(path, sizeof(path), "%s/log.txt", data_dir);
-    log_file = fopen(path, "w");
+    /* applet mode (launched from the Album) has far less memory and fewer threads */
+    u64 mem_total = 0, mem_used = 0;
+    svcGetInfo(&mem_total, InfoType_TotalMemorySize, CUR_PROCESS_HANDLE, 0);
+    svcGetInfo(&mem_used, InfoType_UsedMemorySize, CUR_PROCESS_HANDLE, 0);
+    AppletType type = appletGetAppletType();
+    platform_log("%s mode, memory %llu MB (%llu MB used)",
+                 (type == AppletType_Application || type == AppletType_SystemApplication) ? "application" : "applet",
+                 (unsigned long long) (mem_total >> 20), (unsigned long long) (mem_used >> 20));
 
     Result rc = MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
     for (size_t i = 0; i < sizeof(socket_configs) / sizeof(socket_configs[0]); i++) {
@@ -287,9 +332,7 @@ bool platform_init(void) {
         mkdir(parent, 0755);
     }
     mkdir(data_dir, 0755);
-    char path[600];
-    snprintf(path, sizeof(path), "%s/log.txt", data_dir);
-    log_file = fopen(path, "w");
+    open_log();
     return true;
 }
 

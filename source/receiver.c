@@ -307,13 +307,33 @@ static void audio_set_progress(void *cls, uint32_t *start, uint32_t *curr, uint3
 static void audio_remote_control_id(void *cls, const char *dacp_id, const char *active_remote_header) {
 }
 
-/* ---- pairing / access control (no PIN or password) ---- */
+/* ---- pairing / access control ----
+ * iPhones and iPads connect without a code. A Mac asks for a one-time code before it
+ * sends video (pair-pin-start): the code is shown on screen until it is used. */
+
+#define PIN_SHOW_MS 120000UL
+
+static uint64_t pin_shown_ms = 0;
 
 static void display_pin(void *cls, char *pin) {
-    platform_log("receiver: client requested PIN pairing (%s), which SwitchAirCast does not use", pin);
+    pthread_mutex_lock(&mutex);
+    bool same = !strcmp(status.pin, pin);
+    snprintf(status.pin, sizeof(status.pin), "%s", pin);
+    pin_shown_ms = now_ms();
+    pthread_mutex_unlock(&mutex);
+    if (!same) platform_log("receiver: showing AirPlay code %s for pairing", pin);
+}
+
+static void clear_pin(void) {
+    pthread_mutex_lock(&mutex);
+    status.pin[0] = '\0';
+    pin_shown_ms = 0;
+    pthread_mutex_unlock(&mutex);
 }
 
 static void register_client(void *cls, const char *device_id, const char *pk_str, const char *name) {
+    platform_log("receiver: paired with %s (%s)", name ? name : "?", device_id ? device_id : "?");
+    clear_pin();
 }
 
 static bool check_register(void *cls, const char *pk_str) {
@@ -532,6 +552,9 @@ bool receiver_start(const config_t *cfg, const char *name, char *err, size_t err
     raop_set_plist(raop, "height", cfg->height);
     raop_set_plist(raop, "refreshRate", 60);
     raop_set_plist(raop, "maxFPS", cfg->max_fps);
+    /* lets a Mac that paired with a code reconnect with pair-verify alone; the code is
+     * random (0) and only ever asked for by Macs, the advertisement still says "no password" */
+    raop_set_plist(raop, "pin", 0);
     if (cfg->video_casting) {
         raop_set_plist(raop, "hls", 1);
         /* the library requires a language list when HLS is on; a code no stream uses
@@ -726,6 +749,12 @@ void receiver_get_status(receiver_status_t *st) {
         st->position += (double) (now_ms() - progress_stamp_ms) / 1000.0;
         if (st->position > st->duration) st->position = st->duration;
     }
+    /* the code is no longer needed once the Mac streams, and expires like the library's */
+    if (status.pin[0] && (st->state == RECEIVER_VIDEO || now_ms() - pin_shown_ms > PIN_SHOW_MS)) {
+        status.pin[0] = '\0';
+        pin_shown_ms = 0;
+    }
+    if (st->state == RECEIVER_VIDEO) st->pin[0] = '\0';
     pthread_mutex_unlock(&mutex);
     st->audio_playing = audio_active();
 }

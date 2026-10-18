@@ -37,6 +37,7 @@ typedef struct {
     double duration;
     bool has_progress;
     unsigned coverart_serial;   /* changes whenever the cover art changes */
+    char pin[8];                /* code a Mac must type to pair (pair-pin-start), empty if none */
 } receiver_status_t;
 
 /* Starts advertising and serving AirPlay as `name`. On failure writes a message to err. */

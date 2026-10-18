@@ -248,6 +248,8 @@ raop_handler_info(raop_conn_t *conn,
     http_response_add_header(response, "Content-Type", "application/x-apple-binary-plist");
 }
 
+#define PIN_REUSE_SECONDS 120
+
 static void
 raop_handler_pairpinstart(raop_conn_t *conn,
                           http_request_t *request, http_response_t *response,
@@ -255,14 +257,20 @@ raop_handler_pairpinstart(raop_conn_t *conn,
     raop_t *raop = conn->raop;
     logger_log(raop->logger, LOGGER_INFO, "client sent PAIR-PIN-START request");
     int pin_4 = 0;
+    time_t now = time(NULL);
     if (raop->pin > 9999) {
         pin_4 = raop->pin % 10000;
+    } else if (raop->pin_time && now - raop->pin_time < PIN_REUSE_SECONDS) {
+        /* a Mac sends several pair-pin-start requests in a row: keep showing the code
+         * the user may already be typing */
+        pin_4 = raop->pin;
     } else {
         pin_4 = random_pin();
         if (pin_4 < 0) {
             logger_log(raop->logger, LOGGER_ERR, "Failed to generate random pin");
         } else {
             raop->pin = (unsigned short) pin_4 % 10000;
+            raop->pin_time = now;
         }
     }
     char pin[6] = { '\0' };
@@ -329,6 +337,7 @@ raop_handler_pairsetup_pin(raop_conn_t *conn,
         snprintf(pin, 6, "%04u", raop->pin % 10000);
         if (raop->pin < 10000) {
             raop->pin = 0;
+            raop->pin_time = 0;
         }
         int ret = srp_new_user(conn->session, raop->pairing, (const char *) user,
                                (const char *) pin, &salt, &len_salt, &pk, &len_pk);
@@ -363,8 +372,14 @@ raop_handler_pairsetup_pin(raop_conn_t *conn,
             logger_log(raop->logger, LOGGER_DEBUG, "client SRP6a proof <M> :\n%s", str);	    
             free (str);
         }
-        memcpy(proof, client_proof, sizeof(proof));
+        /* the client's M is one hash (20 bytes); never read past what it sent */
+        memcpy(proof, client_proof, client_proof_len < sizeof(proof) ? (size_t) client_proof_len : sizeof(proof));
         free (client_proof);
+        if (!conn->session || client_pk_len == 0) {
+            free (client_pk);
+            plist_free(req_root_node);
+            goto authentication_failed;
+        }
         int ret = srp_validate_proof(conn->session, raop->pairing, (const unsigned char *) client_pk,
                                      (int) client_pk_len, proof, (int) sizeof(proof));
         free (client_pk);
@@ -405,6 +420,14 @@ raop_handler_pairsetup_pin(raop_conn_t *conn,
             free (str);
         }
 
+        if (client_epk_len != ED25519_KEY_SIZE || client_authtag_len != GCM_AUTHTAG_SIZE) {
+            logger_log(raop->logger, LOGGER_ERR, "pair-setup-pin (step 3): unexpected epk/authTag sizes %d/%d",
+                       (int) client_epk_len, (int) client_authtag_len);
+            free (client_authtag);
+            free (client_epk);
+            plist_free(req_root_node);
+            goto authentication_failed;
+        }
         memcpy(epk, client_epk, ED25519_KEY_SIZE);
         memcpy(authtag, client_authtag, GCM_AUTHTAG_SIZE);
         free (client_authtag);
