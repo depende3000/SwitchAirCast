@@ -224,7 +224,7 @@ int platform_motion_rotation(void) {
     float x = st.acceleration.x, y = st.acceleration.y;
     /* gravity along the long edge means the console is held upright; hysteresis avoids flapping */
     int next = rotation;
-    if (fabsf(x) > 0.7f && fabsf(x) > fabsf(y) + 0.35f) next = x > 0 ? 90 : 270;
+    if (fabsf(x) > 0.7f && fabsf(x) > fabsf(y) + 0.35f) next = x > 0 ? 270 : 90;  /* the opposite mapping turned the picture upside down on an OLED */
     else if (fabsf(y) > 0.7f && fabsf(y) > fabsf(x) + 0.35f) next = 0;
     if (next != rotation) {
         platform_log("motion: rotation %d (acceleration %.2f %.2f %.2f)", next, x, y, st.acceleration.z);
