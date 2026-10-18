@@ -543,6 +543,54 @@ static void close_input(input_t *in) {
     in->vidx = in->aidx = -1;
 }
 
+/* A remote master playlist (Safari sends YouTube's), reduced to one variant; NULL if the
+ * URL is not one. Owned by the player thread. */
+static char *remote_master = NULL;
+
+#define MASTER_MAX_BYTES (1024 * 1024)
+
+/* Safari gives the URL of a master playlist listing every quality. Left alone, FFmpeg
+ * downloads each quality's playlist and the start of its stream before playing (several
+ * seconds over HTTPS on the console). Fetch the master here and keep one variant. */
+static char *fetch_reduced_master(const char *url, int max_height) {
+    if (strncmp(url, "http://", 7) && strncmp(url, "https://", 8)) return NULL;
+    if (!strstr(url, ".m3u8")) return NULL;
+    AVIOContext *pb = NULL;
+    AVDictionary *opts = NULL;
+    av_dict_set(&opts, "user_agent", USER_AGENT, 0);
+    av_dict_set(&opts, "rw_timeout", RW_TIMEOUT_US, 0);
+    AVIOInterruptCB cb = { interrupt_cb, NULL };
+    int ret = avio_open2(&pb, url, AVIO_FLAG_READ, &cb, &opts);
+    av_dict_free(&opts);
+    if (ret < 0) return NULL;
+    size_t cap = 64 * 1024, len = 0;
+    char *buf = malloc(cap + 1);
+    while (buf) {
+        if (len == cap) {
+            if (cap >= MASTER_MAX_BYTES) break;
+            char *grown = realloc(buf, cap * 2 + 1);
+            if (!grown) break;
+            buf = grown;
+            cap *= 2;
+        }
+        int n = avio_read(pb, (unsigned char *) buf + len, (int) (cap - len));
+        if (n <= 0) break;
+        len += (size_t) n;
+        /* not a playlist: stop reading what may be a whole video file */
+        if (len >= 7 && strncmp(buf, "#EXTM3U", 7)) break;
+    }
+    avio_closep(&pb);
+    char *reduced = NULL;
+    if (buf) {
+        buf[len] = '\0';
+        if (len >= 7 && !strncmp(buf, "#EXTM3U", 7) && strstr(buf, "#EXT-X-STREAM-INF:")) {
+            reduced = pick_variant(buf, max_height);
+        }
+        free(buf);
+    }
+    return reduced;
+}
+
 /* Opens req->url (serving in-memory playlists) and picks the streams to play. */
 static int open_input(input_t *in, bool quick) {
     char err[128];
@@ -567,6 +615,14 @@ static int open_input(input_t *in, bool quick) {
             platform_log("player: master playlist %s not available", path);
             close_input(in);
             return AVERROR(ENOENT);
+        }
+        fmt->pb = in->master_pb;
+        fmt->flags |= AVFMT_FLAG_CUSTOM_IO;
+    } else if (remote_master) {
+        /* relative variant URIs still resolve against req->url */
+        if (!(in->master_pb = mem_open(remote_master, strlen(remote_master)))) {
+            close_input(in);
+            return AVERROR(ENOMEM);
         }
         fmt->pb = in->master_pb;
         fmt->flags |= AVFMT_FLAG_CUSTOM_IO;
@@ -625,6 +681,7 @@ static void *player_thread(void *arg) {
 
     platform_log("player: opening %s (start at %.1f s)", req->url, req->start);
     if (!pkt) goto done;
+    if (!reopen_seek) remote_master = fetch_reduced_master(req->url, options.max_height);
     if (open_input(&in, false) < 0) goto done;
 
     if (in.vidx >= 0) {
@@ -741,6 +798,8 @@ static void *player_thread(void *arg) {
 done:
     av_packet_free(&pkt);
     close_input(&in);
+    free(remote_master);
+    remote_master = NULL;
     finish(error);
     return NULL;
 }

@@ -3,6 +3,10 @@
  * and prints its state over time, consuming frames like the main loop does.
  *
  *   SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy player_test <url> [seek_at seek_to] [pause_at]
+ *
+ * PLAYER_SAFARI=1 or 2 replays what Safari on a Mac sends around the start of playback:
+ *   1: play while loading; once playing: pause (+0.4 s), play (+1.0 s), seek to 0 (+1.07 s)
+ *   2: play while loading, pause just before playback starts, play right after it starts
  */
 
 #include <stdio.h>
@@ -42,8 +46,48 @@ int main(int argc, char **argv) {
     unsigned long shown = 0;
     int64_t last_pts = AV_NOPTS_VALUE;
     bool seeked = false, paused = false;
+    int safari = getenv("PLAYER_SAFARI") ? atoi(getenv("PLAYER_SAFARI")) : 0;
+    int safari_step = 0;
+    double playing_at = -1;
+    unsigned long shown_at_script_end = 0;
     for (;;) {
         double t = now_s() - start;
+        if (safari) {
+            player_status_t s0;
+            player_get_status(&s0);
+            if (playing_at < 0 && s0.state == PLAYER_PLAYING) playing_at = t;
+            double since = playing_at < 0 ? -1 : t - playing_at;
+            if (safari_step == 0) {
+                printf("--- safari: play (loading)\n");
+                player_set_paused(false);
+                safari_step++;
+            } else if (safari == 2 && safari_step == 1 && s0.state == PLAYER_LOADING) {
+                printf("--- safari: pause (loading)\n");
+                player_set_paused(true);
+                safari_step++;
+            } else if (safari == 2 && safari_step == 2 && since >= 0.05) {
+                printf("--- safari: play\n");
+                player_set_paused(false);
+                safari_step = 9;
+                shown_at_script_end = shown;
+            } else if (safari == 1 && safari_step == 1 && since >= 0.4) {
+                printf("--- safari: pause\n");
+                player_set_paused(true);
+                safari_step++;
+            } else if (safari == 1 && safari_step == 2 && since >= 1.0) {
+                printf("--- safari: play\n");
+                player_set_paused(false);
+                safari_step++;
+            } else if (safari == 1 && safari_step == 3 && since >= 1.07) {
+                printf("--- safari: seek 0\n");
+                player_seek(0);
+                safari_step = 9;
+                shown_at_script_end = shown;
+            } else if (safari_step == 9 && since >= 6.0) {
+                printf("frames shown in the 5 s after Safari's requests: %lu\n", shown - shown_at_script_end);
+                break;
+            }
+        }
         if (!seeked && seek_at >= 0 && t >= seek_at) {
             printf("--- seek to %.1f\n", seek_to);
             player_seek(seek_to);
