@@ -1,8 +1,18 @@
-# SwitchAirCast
+<p align="center">
+  <img src="docs/logo.svg" width="140" alt="SwitchAirCast logo">
+</p>
 
-Turn your Nintendo Switch into an AirPlay receiver. Mirror your iPhone, iPad or Mac to the
-Switch, send YouTube videos to it, or play music through it — the same way you would with an
-Apple TV.
+<h1 align="center">SwitchAirCast</h1>
+
+<p align="center">
+  Turn your Nintendo Switch into an AirPlay receiver. Mirror your iPhone, iPad or Mac to the
+  Switch, send YouTube videos to it, or play music through it — the same way you would with an
+  Apple TV.
+</p>
+
+<p align="center">
+  <a href="../../releases/latest"><b>Download the latest release</b></a>
+</p>
 
 ## What it can do
 
