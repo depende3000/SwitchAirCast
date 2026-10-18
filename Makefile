@@ -26,7 +26,7 @@ INCLUDES	:=	source lib/airplay lib/airplay/playfair lib/airplay/llhttp \
 ROMFS		:=
 
 APP_TITLE	:=	SwitchAirCast
-APP_AUTHOR	:=	SwitchAirCast contributors
+APP_AUTHOR	:=	depende3000
 APP_VERSION	:=	1.0.0
 ICON		:=	icon.jpg
 
