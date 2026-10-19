@@ -831,10 +831,30 @@ http_handler_play(raop_conn_t *conn, http_request_t *request, http_response_t *r
 #endif
 	   
     plist_t req_content_location_node = plist_dict_get_item(req_root_node, "Content-Location");
-    if (!req_content_location_node) {
-        goto play_error;
-    } else {
+    if (req_content_location_node) {
         plist_get_string_val(req_content_location_node, &playback_location);
+    } else {
+        /* a local file (QuickTime on a Mac, mediaType "file") comes without Content-Location:
+         * the sender serves it itself at "host" + "path" */
+        plist_t req_host_node = plist_dict_get_item(req_root_node, "host");
+        plist_t req_path_node = plist_dict_get_item(req_root_node, "path");
+        if (!req_host_node || !req_path_node ||
+            plist_get_node_type(req_host_node) != PLIST_STRING ||
+            plist_get_node_type(req_path_node) != PLIST_STRING) {
+            goto play_error;
+        }
+        const char *host = plist_get_string_ptr(req_host_node, NULL);
+        const char *path = plist_get_string_ptr(req_path_node, NULL);
+        if (!host || !path || !*host || path[0] != '/' || strpbrk(host, "/?#@ ")) {
+            goto play_error;
+        }
+        size_t len = strlen("http://") + strlen(host) + strlen(path) + 1;
+        playback_location = (char *) malloc(len);
+        if (!playback_location) {
+            goto play_error;
+        }
+        snprintf(playback_location, len, "http://%s%s", host, path);
+        logger_log(raop->logger, LOGGER_INFO, "playing sender-hosted file %s", playback_location);
     }
     /* we support HLS playlists if the playback location is terminated by "/master.m3u8", otherwise pass location to player */
     const char *uri_suffix = strstr(playback_location, "/master.m3u8");    

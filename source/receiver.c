@@ -506,6 +506,9 @@ bool receiver_start(const config_t *cfg, const char *name, char *err, size_t err
     /* UxPlay's default feature set, minus what SwitchAirCast does not implement */
     dnssd_set_airplay_features(dnssd, 0, cfg->video_casting ? 1 : 0);  /* AirPlay video (URL) playback */
     dnssd_set_airplay_features(dnssd, 4, cfg->video_casting ? 1 : 0);  /* HLS */
+    /* the receiver can fetch media the sender serves itself; without it macOS reports
+     * "CannotFetchMediaFromSender" and QuickTime refuses to send local files */
+    dnssd_set_airplay_features(dnssd, 35, cfg->video_casting ? 1 : 0);
     dnssd_set_airplay_features(dnssd, 42, 0);  /* H.265 screen mirroring */
     /* bit 27 (legacy pairing) stays on: without it a Mac asks for a code (pair-pin-start)
      * but then gives up without showing the box to type it in */
