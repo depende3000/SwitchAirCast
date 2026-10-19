@@ -7,7 +7,7 @@
 <p align="center">
   Turn your Nintendo Switch into an AirPlay receiver. Mirror your iPhone, iPad or Mac to the
   Switch, send YouTube videos to it, or play music through it — the same way you would with an
-  Apple TV.
+  Apple TV. Android phones and Windows PCs can send videos and music to it too, over DLNA.
 </p>
 
 <p align="center">
@@ -24,6 +24,9 @@
   so you can lock it or use other apps meanwhile.
 - **Music over AirPlay**, with the song title, artist, album, cover art and progress on screen,
   and volume control from your device.
+- **Videos and music from Android and Windows** (DLNA): send them with an app such as
+  BubbleUPnP or Web Video Caster, or with **Cast to Device** in Windows. The Switch plays the
+  file itself; pause, seek, volume and playlists work from the app.
 - **Vertical mode** for portrait apps: turn the picture 90° and hold the console upright. It can
   also follow the console's motion sensor automatically.
 - **Screen off** while music keeps playing (button Y, or automatically after a few minutes).
@@ -33,7 +36,7 @@
 ## What you need
 
 - A Switch that can run homebrew (Atmosphère with the Homebrew Menu).
-- The Switch and your iPhone, iPad or Mac on the same Wi-Fi network.
+- The Switch and your iPhone, iPad, Mac, Android device or PC on the same Wi-Fi network.
 
 ## Install
 
@@ -62,6 +65,20 @@
 Pause, seek and stop from your device, or with the Switch buttons below.
 
 **Play music:** choose the Switch as the AirPlay speaker in Music, Spotify, Control Center, etc.
+
+**From Android**
+
+Android has no AirPlay, and the Switch can't appear under the **Cast** (Chromecast) button:
+Google only lets devices it has certified receive Google Cast. Use a DLNA app instead:
+
+- **BubbleUPnP**, **LocalCast** or **Web Video Caster**: choose the Switch as the "renderer" or
+  "player", then pick a video, song or web video in the app. Playlists play one after another.
+- Other media apps with a "Play to" or UPnP player option (Kodi, for example) work the same way.
+
+**From Windows:** right-click a video or music file → **Cast to Device** (on Windows 11 under
+**Show more options**) → choose the Switch.
+
+**From a Mac or Linux PC:** any DLNA / UPnP control point app can send to the Switch.
 
 ### Buttons
 
@@ -105,6 +122,7 @@ a computer (changes there apply the next time you start the app).
 | `max_fps` | `60` | Frame rate asked from your device (`60` or `30` in the Settings menu) |
 | `audio` | `true` | Play sound on the Switch |
 | `video_casting` | `true` | Accept videos sent from YouTube / Safari |
+| `dlna` | `true` | Accept videos and music from Android and Windows apps (DLNA). Uses UDP port 1900 and TCP port 49152 |
 | `video_language` | `default` | Audio track for videos with several languages: `default` (the video's own), `system` (console language), or language codes such as `es:en` |
 | `hw_decode` | `true` | Use the hardware video decoder (turn off only for troubleshooting) |
 | `show_stats` | `false` | Start with the technical info visible |
@@ -117,6 +135,15 @@ a computer (changes there apply the next time you start the app).
 guest network, which usually keeps devices apart). Wait a few seconds after starting the app, or
 restart it. Some routers block devices from finding each other; look for "AP isolation" or
 "client isolation" in the router settings and turn it off.
+
+**The Switch isn't under the Cast (Chromecast) button on Android or in Chrome.** That is
+expected: Google Cast only works with devices that Google has certified, and the Switch cannot
+be one. Use a DLNA app (see [From Android](#using-it)) or Windows' Cast to Device. YouTube's own
+app can't cast to DLNA devices; open the video in Web Video Caster instead.
+
+**An Android app or Windows doesn't find the Switch.** Same Wi-Fi network and router checks as
+above. Wait up to 30 seconds after starting SwitchAirCast: it announces itself on the network
+every 30 seconds. Some apps also let you refresh the device list.
 
 **"Open SwitchAirCast through a game" appears.** It was started from the Album. Press **+**,
 then open the Homebrew Menu by holding **R** while starting any game; see [Install](#install).
@@ -157,10 +184,13 @@ gets a line every 5 seconds with the frame rate and how many frames were skipped
 
 - Videos are played up to 1080p in H.264. YouTube's 4K (VP9/AV1) versions are skipped, and 4K
   (H.265) mirroring is not supported.
+- No Google Cast (Chromecast): it requires a Google-certified device. Android and Windows send
+  over DLNA instead, which plays files and web videos but can't mirror the screen.
 - Movie files sent from QuickTime Player on a Mac don't play (see
   [Troubleshooting](#troubleshooting)); mirror the Mac's screen instead.
-- Anyone on your network can mirror to the Switch while the app is open. Macs need the one-time
-  code before sending videos; iPhones and iPads connect without one.
+- Anyone on your network can mirror to the Switch, or send it media over DLNA, while the app is
+  open. Macs need the one-time code before sending videos; iPhones, iPads and DLNA apps connect
+  without one. Set `dlna = false` to turn DLNA off.
 
 ## For developers
 
@@ -171,11 +201,14 @@ Building, the desktop test setup and how the code is organised are described in
 
 GPL-3.0-or-later (see [LICENSE](LICENSE)). The AirPlay protocol support comes from
 [UxPlay](https://github.com/FDH2/UxPlay)'s library (with RPiPlay and the FairPlay
-implementation it includes), ported to the Switch; video and audio playback use FFmpeg and SDL2.
+implementation it includes), ported to the Switch; the DLNA renderer is SwitchAirCast's own; video
+and audio playback use FFmpeg and SDL2.
 libplist is LGPL-2.1 and llhttp is MIT.
 
 SwitchAirCast is not affiliated with or endorsed by Apple or Nintendo. AirPlay, iPhone, iPad,
-Mac and Safari are trademarks of Apple Inc. Nintendo Switch is a trademark of Nintendo.
+Mac and Safari are trademarks of Apple Inc. Nintendo Switch is a trademark of Nintendo. Google Cast
+and Chromecast are trademarks of Google LLC. DLNA is a trademark of the Digital Living Network
+Alliance.
 
 ## Made with AI assistance
 

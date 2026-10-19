@@ -21,6 +21,7 @@
 #include <time.h>
 
 #include "audio.h"
+#include "dlna.h"
 #include "dnssd.h"
 #include "i18n.h"
 #include "logger.h"
@@ -32,6 +33,8 @@
 
 /* drop a client that has not sent its 2-second feedback heartbeat for this long */
 #define MISSED_FEEDBACK_LIMIT 15
+/* HTTP port of the DLNA renderer (a free one if taken) */
+#define DLNA_PORT 49152
 
 static raop_t *raop = NULL;
 static dnssd_t *dnssd = NULL;
@@ -64,12 +67,42 @@ static char hls_languages[64];
 static char hls_profile_buf[2][64];
 static const char *hls_profile = "";
 
+/* DLNA: media sent by a control point (Android apps, Windows) plays through the same
+ * player. The player belongs to whoever started it last, AirPlay or DLNA; AirPlay
+ * sessions ending must not stop what DLNA plays. */
+static bool pending_dlna = false;       /* pending_play came from DLNA */
+static bool dlna_owns_player = false;
+static unsigned dlna_requested = 0, dlna_started = 0;
+static char dlna_client[128];
+static char dlna_title[128], dlna_artist[128], dlna_album[128];
+
+/* stops whatever plays (mirroring is taking over) */
 static void request_video_stop(void) {
     pthread_mutex_lock(&mutex);
     player_request_free(pending_play);
     pending_play = NULL;
+    if (pending_dlna) dlna_started = dlna_requested;
+    pending_dlna = false;
     pending_video_stop = true;
     pthread_mutex_unlock(&mutex);
+}
+
+/* AirPlay finished its video or its session: media sent over DLNA keeps playing */
+static void request_airplay_video_stop(void) {
+    pthread_mutex_lock(&mutex);
+    if (pending_play && !pending_dlna) {
+        player_request_free(pending_play);
+        pending_play = NULL;
+    }
+    if (!dlna_owns_player && !pending_play) pending_video_stop = true;
+    pthread_mutex_unlock(&mutex);
+}
+
+static bool dlna_playing(void) {
+    pthread_mutex_lock(&mutex);
+    bool dlna = dlna_owns_player || (pending_play && pending_dlna);
+    pthread_mutex_unlock(&mutex);
+    return dlna;
 }
 
 static uint64_t now_ms(void) {
@@ -106,22 +139,25 @@ static void conn_init(void *cls) {
 }
 
 static void conn_destroy(void *cls) {
-    bool last = false;
+    bool last = false, dlna = false;
     pthread_mutex_lock(&mutex);
     if (open_connections > 0) open_connections--;
     last = (open_connections == 0);
+    dlna = dlna_owns_player || (pending_play && pending_dlna);
     if (last) {
         feedback_seen = false;
         status.client_name[0] = '\0';
         status.client_model[0] = '\0';
         mirror_running = false;
-        clear_now_playing_locked();
+        if (!dlna) clear_now_playing_locked();
     }
     pthread_mutex_unlock(&mutex);
     if (last) {
-        request_video_stop();
-        audio_stop();
-        video_flush();
+        request_airplay_video_stop();
+        if (!dlna) {
+            audio_stop();
+            video_flush();
+        }
     }
 }
 
@@ -169,15 +205,17 @@ static void video_reset_cb(void *cls, reset_type_t type) {
     switch (type) {
     case RESET_TYPE_NOHOLD:
         /* a new device took over; the library already dropped the old connections */
-        request_video_stop();
+        request_airplay_video_stop();
         if (config.video_casting) raop_destroy_airplay_video(raop, -1);
-        audio_stop();
-        video_flush();
+        if (!dlna_playing()) {
+            audio_stop();
+            video_flush();
+        }
         break;
     case RESET_TYPE_HLS_SHUTDOWN:
     case RESET_TYPE_HLS_EOS:
         /* AirPlay video finished or was stopped (as UxPlay handles it) */
-        request_video_stop();
+        request_airplay_video_stop();
         raop_destroy_airplay_video(raop, -1);
         if (type == RESET_TYPE_HLS_SHUTDOWN) raop_remove_hls_connections(raop);
         break;
@@ -382,16 +420,19 @@ static void on_video_play(void *cls, const char *location, const float start_pos
     }
     pthread_mutex_lock(&mutex);
     player_request_free(pending_play);
+    if (pending_dlna) dlna_started = dlna_requested;
     pending_play = req;
+    pending_dlna = false;
     pending_video_stop = false;
     pthread_mutex_unlock(&mutex);
 }
 
 static void on_video_scrub(void *cls, const float position) {
-    player_seek(position);
+    if (!dlna_playing()) player_seek(position);
 }
 
 static void on_video_rate(void *cls, const float rate) {
+    if (dlna_playing()) return;
     if (rate == 0.0f) {
         player_set_paused(true);
     } else if (rate == 1.0f) {
@@ -400,15 +441,18 @@ static void on_video_rate(void *cls, const float rate) {
 }
 
 static void on_video_stop(void *cls) {
-    request_video_stop();
+    request_airplay_video_stop();
 }
 
 static void on_video_acquire_playback_info(void *cls, playback_info_t *info) {
     player_status_t st;
     player_get_status(&st);
     pthread_mutex_lock(&mutex);
-    bool starting = pending_play != NULL;
+    bool starting = pending_play != NULL && !pending_dlna;
+    bool replaced = dlna_owns_player || (pending_play && pending_dlna);
     pthread_mutex_unlock(&mutex);
+    /* media from DLNA replaced the AirPlay video: the phone sees it end */
+    if (replaced) st.state = PLAYER_ENDED;
 
     info->rate = st.paused ? 0.0f : 1.0f;
     info->seek_start = 0.0;
@@ -433,7 +477,7 @@ static void on_video_acquire_playback_info(void *cls, playback_info_t *info) {
 
 static float on_video_playlist_remove(void *cls) {
     player_status_t st;
-    player_set_paused(true);
+    if (!dlna_playing()) player_set_paused(true);
     player_get_status(&st);
     return (float) st.position;
 }
@@ -452,6 +496,94 @@ static void set_hls_profile(int height) {
 
 static void log_callback(void *cls, int level, const char *msg) {
     platform_log("%s", msg);
+}
+
+/* ---- DLNA renderer (Android apps, Windows "Cast to Device"...) ---- */
+
+static void dlna_play(const dlna_media_t *m) {
+    player_request_t *req = player_request_new(m->url, m->start, NULL);
+    if (!req) return;
+    pthread_mutex_lock(&mutex);
+    player_request_free(pending_play);
+    pending_play = req;
+    pending_dlna = true;
+    pending_video_stop = false;
+    dlna_requested++;
+    snprintf(dlna_client, sizeof(dlna_client), "%s", m->client);
+    snprintf(dlna_title, sizeof(dlna_title), "%s", m->title);
+    snprintf(dlna_artist, sizeof(dlna_artist), "%s", m->artist);
+    snprintf(dlna_album, sizeof(dlna_album), "%s", m->album);
+    /* the cover art of whatever played before */
+    clear_now_playing_locked();
+    pthread_mutex_unlock(&mutex);
+}
+
+static void dlna_stop_cb(void) {
+    pthread_mutex_lock(&mutex);
+    if (pending_play && pending_dlna) {
+        player_request_free(pending_play);
+        pending_play = NULL;
+        pending_dlna = false;
+        dlna_started = dlna_requested;
+    }
+    if (dlna_owns_player) pending_video_stop = true;
+    pthread_mutex_unlock(&mutex);
+}
+
+static bool dlna_has_player(void) {
+    pthread_mutex_lock(&mutex);
+    bool ours = dlna_owns_player && !pending_play;
+    pthread_mutex_unlock(&mutex);
+    return ours;
+}
+
+static void dlna_set_paused(bool paused) {
+    if (dlna_has_player()) player_set_paused(paused);
+}
+
+static void dlna_seek(double seconds) {
+    if (dlna_has_player()) player_seek(seconds);
+}
+
+static void dlna_get_playback(dlna_playback_t *pb) {
+    player_status_t st;
+    player_get_status(&st);
+    pthread_mutex_lock(&mutex);
+    bool starting = (pending_play && pending_dlna) || dlna_requested != dlna_started;
+    bool ours = dlna_owns_player && !pending_play;
+    pthread_mutex_unlock(&mutex);
+    memset(pb, 0, sizeof(*pb));
+    if (starting) {
+        pb->state = DLNA_TRANSITIONING;
+    } else if (!ours) {
+        pb->state = DLNA_STOPPED;
+    } else if (st.state == PLAYER_LOADING) {
+        pb->state = DLNA_TRANSITIONING;
+    } else if (st.state == PLAYER_PLAYING) {
+        pb->state = st.paused ? DLNA_PAUSED : DLNA_PLAYING;
+        pb->position = st.position;
+        pb->duration = st.duration;
+    } else {
+        pb->state = DLNA_STOPPED;
+        pb->ended = st.completed;
+        pb->failed = st.failed;
+    }
+}
+
+/* DLNA volume 0..100 is the AirPlay range of -30..0 dB (0 = mute) */
+static int dlna_get_volume(void) {
+    float db = audio_get_volume();
+    if (db <= -30.0f) return 0;
+    if (db >= 0.0f) return 100;
+    return (int) ((db + 30.0f) * 100.0f / 30.0f + 0.5f);
+}
+
+static void dlna_set_volume(int volume) {
+    audio_set_volume(volume <= 0 ? -144.0f : -30.0f + 30.0f * (float) volume / 100.0f);
+}
+
+static void dlna_set_coverart(const void *data, int len) {
+    if (dlna_playing()) audio_set_coverart(NULL, data, len);
 }
 
 /* ---- device id ---- */
@@ -619,6 +751,13 @@ bool receiver_start(const config_t *cfg, const char *name, char *err, size_t err
     }
     platform_log("receiver: AirPlay on port %d, features 0x%llX", raop_port,
                  (unsigned long long) dnssd_get_airplay_features(dnssd));
+
+    if (cfg->dlna) {
+        dlna_callbacks_t dcb = { dlna_play,       dlna_stop_cb,    dlna_set_paused,  dlna_seek,
+                                 dlna_get_playback, dlna_get_volume, dlna_set_volume, dlna_set_coverart };
+        /* AirPlay works without it */
+        if (!dlna_start(name, mac, DLNA_PORT, &dcb)) platform_log("receiver: the DLNA renderer did not start");
+    }
     last_watchdog = time(NULL);
     return true;
 
@@ -641,10 +780,13 @@ void receiver_set_video_size(int width, int height, int max_fps) {
 }
 
 void receiver_stop(void) {
+    dlna_stop();
     player_stop();
     pthread_mutex_lock(&mutex);
     player_request_free(pending_play);
     pending_play = NULL;
+    pending_dlna = dlna_owns_player = false;
+    dlna_started = dlna_requested;
     pthread_mutex_unlock(&mutex);
     if (dnssd) {
         dnssd_unregister_raop(dnssd);
@@ -676,7 +818,11 @@ static void poll_video(void) {
     pthread_mutex_lock(&mutex);
     player_request_t *play = pending_play;
     bool stop = pending_video_stop;
+    bool from_dlna = pending_dlna;
+    unsigned serial = dlna_requested;
+    bool airplay_connected = open_connections > 0;
     pending_play = NULL;
+    pending_dlna = false;
     pending_video_stop = false;
     pthread_mutex_unlock(&mutex);
 
@@ -684,11 +830,20 @@ static void poll_video(void) {
         player_stop();
         player_reset();
         video_ended_ms = 0;
+        pthread_mutex_lock(&mutex);
+        dlna_owns_player = false;
+        pthread_mutex_unlock(&mutex);
     }
     if (play) {
         player_options_t opts = { .audio = config.audio, .max_height = config.height };
         player_start(play, &opts);
         video_ended_ms = 0;
+        pthread_mutex_lock(&mutex);
+        dlna_owns_player = from_dlna;
+        if (from_dlna) dlna_started = serial;
+        pthread_mutex_unlock(&mutex);
+        /* a cast from DLNA replaces what an AirPlay device mirrors or plays */
+        if (from_dlna && airplay_connected) request_reset(false, true);
     }
 
     /* the phone learns about the end from its next playback-info request; if it has
@@ -701,6 +856,9 @@ static void poll_video(void) {
             player_stop();
             player_reset();
             video_ended_ms = 0;
+            pthread_mutex_lock(&mutex);
+            dlna_owns_player = false;
+            pthread_mutex_unlock(&mutex);
         }
     } else {
         video_ended_ms = 0;
@@ -748,7 +906,8 @@ void receiver_poll(void) {
 
     platform_log("receiver: reset (httpd %d, drop connections %d)", httpd, remove);
     if (httpd) raop_stop_httpd(raop);
-    if (httpd || !video_playing()) {
+    bool dlna = dlna_playing();
+    if ((httpd && !dlna) || !video_playing()) {
         /* a mirroring -> AirPlay video handover must not cut off the new video */
         player_stop();
         player_reset();
@@ -771,8 +930,22 @@ void receiver_poll(void) {
 
 void receiver_get_status(receiver_status_t *st) {
     bool video = video_playing();
+    player_status_t ps;
+    player_get_status(&ps);
     pthread_mutex_lock(&mutex);
     *st = status;
+    bool dlna = (dlna_owns_player && video) || (pending_play && pending_dlna);
+    if (dlna) {
+        /* what the control point sent: its name, and for music the song and progress */
+        snprintf(st->client_name, sizeof(st->client_name), "%s", dlna_client);
+        st->client_model[0] = '\0';
+        snprintf(st->title, sizeof(st->title), "%s", dlna_title);
+        snprintf(st->artist, sizeof(st->artist), "%s", dlna_artist);
+        snprintf(st->album, sizeof(st->album), "%s", dlna_album);
+        st->has_progress = ps.state == PLAYER_PLAYING && ps.duration > 0;
+        st->position = ps.position;
+        st->duration = ps.duration;
+    }
     if (video || pending_play) {
         st->state = RECEIVER_VIDEO;
     } else if (mirror_running) {
@@ -782,7 +955,7 @@ void receiver_get_status(receiver_status_t *st) {
     } else {
         st->state = RECEIVER_WAITING;
     }
-    if (st->has_progress && progress_stamp_ms) {
+    if (!dlna && st->has_progress && progress_stamp_ms) {
         st->position += (double) (now_ms() - progress_stamp_ms) / 1000.0;
         if (st->position > st->duration) st->position = st->duration;
     }

@@ -386,6 +386,12 @@ static void track_video_stats(stats_log_t *s, const ui_model_t *m, const int ask
     }
 }
 
+/* Mirroring or a video on screen; music sent over DLNA shows the now-playing screen. */
+static bool shows_picture(const ui_model_t *m) {
+    if (m->rx.state == RECEIVER_MIRRORING) return true;
+    return m->rx.state == RECEIVER_VIDEO && !(m->player.state == PLAYER_PLAYING && !m->player.has_video);
+}
+
 static void show_toast(ui_model_t *m, const char *text, unsigned long now) {
     m->toast = text;
     m->toast_ms = now;
@@ -451,6 +457,7 @@ int main(int argc, char **argv) {
     ui_model_t model;
     memset(&model, 0, sizeof(model));
     model.name = name;
+    model.dlna = cfg.dlna;
     model.port = cfg.port;
     model.show_stats = cfg.show_stats;
     model.screen = UI_SCREEN_STARTING;
@@ -563,7 +570,7 @@ int main(int argc, char **argv) {
             }
 
             bool video = started && model.rx.state == RECEIVER_VIDEO;
-            bool picture = started && (model.rx.state == RECEIVER_VIDEO || model.rx.state == RECEIVER_MIRRORING);
+            bool picture = started && shows_picture(&model);
             /* touching the console during a cast: remind that - opens the settings */
             if (picture && act != ACT_SETTINGS && act != ACT_QUIT) model.options_hint_ms = now;
             switch (act) {
@@ -718,7 +725,7 @@ int main(int argc, char **argv) {
             last_activity = now;
         }
         /* turn the screen off after a while of waiting or music, never during a picture */
-        bool picture = model.rx.state == RECEIVER_MIRRORING || model.rx.state == RECEIVER_VIDEO;
+        bool picture = shows_picture(&model);
         if (!model.screen_off && cfg.screen_off_minutes > 0 && !model.settings_open && !picture &&
             now - last_activity > (unsigned long) cfg.screen_off_minutes * 60000UL) {
             platform_log("main: turning the screen off after %d min", cfg.screen_off_minutes);

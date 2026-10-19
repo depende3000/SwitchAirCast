@@ -446,7 +446,8 @@ static void draw_ready_screen(const ui_model_t *m) {
     draw_background();
     draw_header(tr(S_APP_SUBTITLE));
 
-    float cx = 80.0f, cy = 172.0f, cw = base_w - 160.0f, ch = 352.0f;
+    int n_steps = m->dlna ? 4 : 3;
+    float cx = 80.0f, cy = 172.0f, cw = base_w - 160.0f, ch = 202.0f + 50.0f * (float) n_steps;
     fill_round_rect(cx, cy, cw, ch, 22.0f, COL_CARD);
 
     if (connected) snprintf(buf, sizeof(buf), tr(S_CONNECTED_TO), client_or(m, S_A_DEVICE));
@@ -464,8 +465,9 @@ static void draw_ready_screen(const ui_model_t *m) {
 
     char choose[TEXT_MAX];
     snprintf(choose, sizeof(choose), tr(S_STEP_CHOOSE), m->name);
-    const char *steps[3] = { tr(S_STEP_WIFI), tr(S_STEP_CONTROL_CENTER), choose };
-    for (int i = 0; i < 3; i++) {
+    const char *steps[4] = { tr(S_STEP_WIFI), tr(S_STEP_CONTROL_CENTER), tr(S_STEP_DLNA), choose };
+    if (!m->dlna) steps[2] = choose;
+    for (int i = 0; i < n_steps; i++) {
         float sy = cy + 196.0f + 50.0f * (float) i;
         fill_circle(cx + 46.0f, sy + 14.0f, 15.0f, COL_ACCENT);
         snprintf(buf, sizeof(buf), "%d", i + 1);
@@ -622,6 +624,7 @@ static void draw_playback_controls(const ui_model_t *m) {
     };
     float hx = x + 60.0f;
     for (size_t i = 0; i < sizeof(hints) / sizeof(hints[0]); i++) {
+        if (i == 2 && !p->has_video) continue;   /* music has no picture to turn */
         if (hx + hint_width(hints[i].label) > base_w - 40.0f) break;
         hx = draw_hint_color(hx, y - 47.0f, hints[i].button, hints[i].label, text);
     }
@@ -636,6 +639,12 @@ static void draw_video_playback(const ui_model_t *m) {
     if (p->state == PLAYER_ENDED && p->failed) {
         draw_message_screen(m, COL_RED, "!", tr(S_VIDEO_FAILED_TITLE), tr(S_VIDEO_FAILED_LINE1),
                             tr(S_VIDEO_FAILED_LINE2));
+        return;
+    }
+    /* music sent over DLNA: the same screen as AirPlay music */
+    if (p->state == PLAYER_PLAYING && !p->has_video) {
+        draw_now_playing(m);
+        if (p->paused || m->now_ms < m->osd_until_ms) draw_playback_controls(m);
         return;
     }
     if (m->video_tex && m->video_w > 0 && m->video_h > 0) {
@@ -777,7 +786,9 @@ static void set_output(int w, int h) {
 }
 
 static bool is_video_screen(const ui_model_t *m) {
-    return m->screen == UI_SCREEN_READY && (m->rx.state == RECEIVER_VIDEO || m->rx.state == RECEIVER_MIRRORING);
+    if (m->screen != UI_SCREEN_READY) return false;
+    if (m->rx.state == RECEIVER_MIRRORING) return true;
+    return m->rx.state == RECEIVER_VIDEO && !(m->player.state == PLAYER_PLAYING && !m->player.has_video);
 }
 
 static void draw_screen(const ui_model_t *m) {

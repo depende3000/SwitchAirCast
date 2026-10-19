@@ -30,6 +30,7 @@ void config_defaults(config_t *cfg) {
     cfg->max_fps = 60;
     cfg->audio = true;
     cfg->video_casting = true;
+    cfg->dlna = true;
     snprintf(cfg->video_language, sizeof(cfg->video_language), "default");
     cfg->hw_decode = true;
     cfg->show_stats = false;
@@ -118,6 +119,8 @@ void config_load(config_t *cfg, const char *path) {
             if (*val) snprintf(cfg->video_language, sizeof(cfg->video_language), "%s", val);
         } else if (!strcasecmp(key, "video_casting")) {
             cfg->video_casting = parse_bool(val, cfg->video_casting);
+        } else if (!strcasecmp(key, "dlna")) {
+            cfg->dlna = parse_bool(val, cfg->dlna);
         } else if (!strcasecmp(key, "hw_decode")) {
             cfg->hw_decode = parse_bool(val, cfg->hw_decode);
         } else if (!strcasecmp(key, "show_stats")) {
@@ -187,6 +190,10 @@ bool config_save(const config_t *cfg, const char *path) {
             "# then streams the video itself and the phone becomes a remote.\n"
             "video_casting = %s\n"
             "\n"
+            "# Accept videos and music from Android apps (BubbleUPnP, Web Video Caster...),\n"
+            "# Windows (\"Cast to Device\") and other DLNA / UPnP apps.\n"
+            "dlna = %s\n"
+            "\n"
             "# Audio track for AirPlay video when a video has several languages:\n"
             "#   default  = the video's original/default track (what the phone plays)\n"
             "#   system   = the console's language when available\n"
@@ -207,7 +214,7 @@ bool config_save(const config_t *cfg, const char *path) {
             "debug_log = %s\n",
             cfg->name, language_names[cfg->language], theme_names[cfg->theme], cfg->screen_off_minutes,
             rotation_names[cfg->rotation], resolution_names[cfg->resolution], cfg->width, cfg->height, cfg->max_fps, cfg->audio ? "true" : "false",
-            cfg->video_casting ? "true" : "false", cfg->video_language, cfg->hw_decode ? "true" : "false",
+            cfg->video_casting ? "true" : "false", cfg->dlna ? "true" : "false", cfg->video_language, cfg->hw_decode ? "true" : "false",
             cfg->show_stats ? "true" : "false", cfg->port, cfg->debug_log ? "true" : "false");
     bool ok = !ferror(f);
     fclose(f);

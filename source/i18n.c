@@ -17,7 +17,7 @@
 #include <strings.h>
 
 static const char *const en[S_COUNT] = {
-    [S_APP_SUBTITLE] = "AirPlay receiver",
+    [S_APP_SUBTITLE] = "AirPlay and DLNA receiver",
     [S_EXIT] = "Exit",
     [S_SETTINGS] = "Settings",
     [S_SCREEN_OFF] = "Screen off",
@@ -43,8 +43,9 @@ static const char *const en[S_COUNT] = {
     [S_A_DEVICE] = "a device",
     [S_YOUR_DEVICE] = "your device",
     [S_IP_ADDRESS] = "IP address %s",
-    [S_STEP_WIFI] = "Connect your iPhone, iPad or Mac to the same Wi-Fi network as this Switch.",
-    [S_STEP_CONTROL_CENTER] = "Open Control Center \xE2\x86\x92 Screen Mirroring, or AirPlay in YouTube or a music app.",
+    [S_STEP_WIFI] = "Connect your phone, tablet or computer to the same Wi-Fi network as this Switch.",
+    [S_STEP_CONTROL_CENTER] = "iPhone, iPad, Mac: Control Center \xE2\x86\x92 Screen Mirroring, or AirPlay in an app.",
+    [S_STEP_DLNA] = "Android, Windows: cast with a DLNA app like BubbleUPnP, or Cast to Device.",
     [S_STEP_CHOOSE] = "Choose \xE2\x80\x9C%s\xE2\x80\x9D from the list.",
     [S_PLAYING_FROM] = "Playing from %s",
     [S_PLAYING_AUDIO] = "Playing audio",
@@ -106,7 +107,7 @@ static const char *const en[S_COUNT] = {
 };
 
 static const char *const es[S_COUNT] = {
-    [S_APP_SUBTITLE] = "Receptor AirPlay",
+    [S_APP_SUBTITLE] = "Receptor AirPlay y DLNA",
     [S_EXIT] = "Salir",
     [S_SETTINGS] = "Ajustes",
     [S_SCREEN_OFF] = "Apagar pantalla",
@@ -132,8 +133,9 @@ static const char *const es[S_COUNT] = {
     [S_A_DEVICE] = "un dispositivo",
     [S_YOUR_DEVICE] = "tu dispositivo",
     [S_IP_ADDRESS] = "Direcci\xC3\xB3n IP %s",
-    [S_STEP_WIFI] = "Conecta tu iPhone, iPad o Mac a la misma red Wi-Fi que esta Switch.",
-    [S_STEP_CONTROL_CENTER] = "Abre el Centro de control y toca Duplicar pantalla, o AirPlay en YouTube o M\xC3\xBAsica.",
+    [S_STEP_WIFI] = "Conecta tu tel\xC3\xA9" "fono, tableta u ordenador a la misma red Wi-Fi que esta Switch.",
+    [S_STEP_CONTROL_CENTER] = "iPhone, iPad, Mac: Centro de control \xE2\x86\x92 Duplicar pantalla, o AirPlay en una app.",
+    [S_STEP_DLNA] = "Android, Windows: env\xC3\xAD" "a con una app DLNA como BubbleUPnP, o Transmitir a dispositivo.",
     [S_STEP_CHOOSE] = "Elige \xE2\x80\x9C%s\xE2\x80\x9D en la lista.",
     [S_PLAYING_FROM] = "Reproduciendo desde %s",
     [S_PLAYING_AUDIO] = "Reproduciendo audio",
@@ -196,6 +198,7 @@ static const char *const es[S_COUNT] = {
 
 /* Latin-American Spanish: only the strings that differ from Spain's */
 static const char *const es_419[S_COUNT] = {
+    [S_STEP_WIFI] = "Conecta tu tel\xC3\xA9" "fono, tableta o computadora a la misma red Wi-Fi que esta Switch.",
     [S_LOADING_VIDEO] = "Cargando el video",
     [S_LOADING_VIDEO_FROM] = "Cargando el video de %s",
     [S_PLAYING_VIDEO] = "Reproduciendo video AirPlay",

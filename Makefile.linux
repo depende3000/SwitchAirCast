@@ -76,13 +76,17 @@ $(BUILD)/player_test: $(BUILD)/tests/player_test.o $(BUILD)/source/player.o $(BU
 		$(BUILD)/source/audio.o $(BUILD)/source/platform.o
 	$(CC) -o $@ $^ $(LDLIBS)
 
+# DLNA renderer with a simulated player (driven by tests/dlna_client.py)
+$(BUILD)/dlna_test: $(BUILD)/tests/dlna_test.o $(BUILD)/source/dlna.o $(BUILD)/source/platform.o
+	$(CC) -o $@ $^ -lpthread -lm
+
 # HLS playlist rewriting (includes player.c to reach its static helpers)
 $(BUILD)/trim_test: tests/trim_test.c source/player.c $(BUILD)/source/video.o $(BUILD)/source/audio.o \
 		$(BUILD)/source/platform.o
 	$(CC) $(CFLAGS) -o $@ tests/trim_test.c $(BUILD)/source/video.o $(BUILD)/source/audio.o \
 		$(BUILD)/source/platform.o $(LDLIBS)
 
-tests: $(BUILD)/trim_test $(BUILD)/player_test $(BUILD)/fake_youtube $(BUILD)/ui_preview $(BUILD)/make_icon $(BUILD)/crypto_test $(BUILD)/mirror_decrypt_test $(BUILD)/srp_server $(BUILD)/fake_mac_pair $(BUILD)/fake_sender
+tests: $(BUILD)/dlna_test $(BUILD)/trim_test $(BUILD)/player_test $(BUILD)/fake_youtube $(BUILD)/ui_preview $(BUILD)/make_icon $(BUILD)/crypto_test $(BUILD)/mirror_decrypt_test $(BUILD)/srp_server $(BUILD)/fake_mac_pair $(BUILD)/fake_sender
 
 clean:
 	rm -rf $(BUILD)
