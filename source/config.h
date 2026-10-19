@@ -16,10 +16,14 @@ typedef enum { LANGUAGE_AUTO, LANGUAGE_EN, LANGUAGE_ES } ui_language_t;
 typedef enum { THEME_AUTO, THEME_DARK, THEME_BLACK } theme_t;
 /* how mirrored/cast video is turned for holding the console upright */
 typedef enum { ROTATION_OFF, ROTATION_AUTO, ROTATION_LEFT, ROTATION_RIGHT } rotation_mode_t;
+/* picture size asked from the sender: auto is 720p handheld and 1080p docked;
+ * custom uses width and height from config.ini */
+typedef enum { RESOLUTION_AUTO, RESOLUTION_1080P, RESOLUTION_720P, RESOLUTION_CUSTOM } resolution_mode_t;
 
 typedef struct {
     char name[64];      /* AirPlay name; empty = console nickname */
-    int width;          /* resolution requested from the sender */
+    resolution_mode_t resolution;
+    int width;          /* resolution requested from the sender with RESOLUTION_CUSTOM */
     int height;
     int max_fps;
     bool audio;         /* play AirPlay audio */
@@ -37,6 +41,9 @@ typedef struct {
 } config_t;
 
 void config_defaults(config_t *cfg);
+
+/* The picture size to ask senders for, given the console's current mode. */
+void config_video_size(const config_t *cfg, bool handheld, int *width, int *height);
 
 /* Loads path over the defaults; writes a commented default file if path does not exist. */
 void config_load(config_t *cfg, const char *path);

@@ -41,6 +41,10 @@ void platform_get_language_tag(char *buf, size_t len);
 /* True on the OLED model. */
 bool platform_is_oled(void);
 
+/* True when started from the Album (applet mode), which leaves too little memory to
+ * decode video. The desktop build pretends so when SWITCHCAST_APPLET is set. */
+bool platform_is_applet_mode(void);
+
 /* True when the console's own screen is the display (handheld mode). */
 bool platform_is_handheld(void);
 
@@ -61,5 +65,9 @@ void platform_set_keep_awake(bool on);
 void platform_random(void *buf, size_t len);
 
 void platform_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+
+/* Debug logging: also writes this run's log to logs/log-<date>_<time>.txt in the data
+ * folder and deletes the oldest of those so that at most `keep` remain. */
+void platform_keep_log_history(int keep);
 
 #endif

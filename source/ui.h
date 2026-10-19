@@ -22,10 +22,11 @@ typedef enum {
     UI_SCREEN_STARTING,
     UI_SCREEN_NO_NETWORK,
     UI_SCREEN_ERROR,
+    UI_SCREEN_APPLET_MODE,  /* started from the Album: the receiver does not run */
     UI_SCREEN_READY,        /* waiting / connected / now playing / mirroring */
 } ui_screen_t;
 
-#define UI_SETTINGS_ITEMS 4
+#define UI_SETTINGS_ITEMS 6
 
 typedef struct {
     ui_screen_t screen;
@@ -56,6 +57,7 @@ typedef struct {
     int settings_index;
     const char *settings_labels[UI_SETTINGS_ITEMS];
     char settings_values[UI_SETTINGS_ITEMS][64];
+    const char *settings_note;       /* hint under the list, about the selected setting */
 } ui_model_t;
 
 bool ui_init(SDL_Renderer *renderer);

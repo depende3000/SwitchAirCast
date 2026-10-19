@@ -44,6 +44,9 @@ typedef struct {
 bool receiver_start(const config_t *cfg, const char *name, char *err, size_t errlen);
 void receiver_stop(void);
 
+/* Changes the picture size and frame rate asked from devices that connect from now on. */
+void receiver_set_video_size(int width, int height, int max_fps);
+
 /* Main thread, once per frame: handles connection resets and the client watchdog. */
 void receiver_poll(void);
 

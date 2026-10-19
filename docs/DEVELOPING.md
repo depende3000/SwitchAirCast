@@ -59,7 +59,7 @@ build/linux/fake_sender 127.0.0.1 7000 10 --audio
 | --- | --- |
 | `source/main.c` | SDL setup, input, frame loop, video texture upload |
 | `source/receiver.c` | UxPlay callbacks, connection resets, client watchdog, pairing code |
-| `source/video.c` | FFmpeg decoding on its own thread (NVDEC on Switch, software fallback); newest-frame mode for mirroring, timed frame queue for playback |
+| `source/video.c` | FFmpeg decoding on its own thread (NVDEC on Switch, software fallback); short frame queue for mirroring (one frame per screen refresh), timed frame queue for playback |
 | `source/player.c` | AirPlay video player: HLS from in-memory or remote playlists, segment download, A/V sync, seeking |
 | `source/audio.c` | AAC-ELD/AAC/ALAC/PCM decoding, resampling, SDL audio queue |
 | `source/ui.c` | All screens, drawn with SDL2 and the Switch system font; themes, settings panel, rotation, banners |

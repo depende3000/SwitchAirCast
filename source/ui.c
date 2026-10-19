@@ -36,6 +36,8 @@ static const int font_base_px[F_COUNT] = { 46, 38, 28, 22, 17, 96 };
 
 enum { ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT };
 
+#define SWITCHCAST_AUTHOR "depende3000"
+
 typedef struct {
     SDL_Color bg_top, bg_bottom, card, text, text_dim, divider, button;
 } palette_t;
@@ -340,7 +342,10 @@ static void draw_footer(const ui_model_t *m, bool connected) {
     }
     if (connected) x = draw_hint(x, y, "B", tr(S_DISCONNECT));
     if (m->screen == UI_SCREEN_ERROR) x = draw_hint(x, y, "A", tr(S_TRY_AGAIN));
-    const char *version = "v" SWITCHCAST_VERSION;
+    /* "v1.0.0 by depende3000", or just the version when the hints leave too little room */
+    char version[64];
+    snprintf(version, sizeof(version), tr(S_VERSION_BY), SWITCHCAST_VERSION, SWITCHCAST_AUTHOR);
+    if (x >= base_w - 80.0f - text_width(F_SMALL, version)) snprintf(version, sizeof(version), "v%s", SWITCHCAST_VERSION);
     if (x < base_w - 80.0f - text_width(F_SMALL, version)) {
         draw_text(F_SMALL, version, base_w - 80.0f, y + 4.0f, COL_TEXT_DIM, ALIGN_RIGHT);
     }
@@ -528,13 +533,21 @@ static const char *codec_label(const char *codec) {
 }
 
 static void draw_stats(const ui_model_t *m) {
-    char lines[4][TEXT_MAX], ms[64];
+    char lines[4][TEXT_MAX], ms[64], shown[16];
     const video_stats_t *v = &m->video;
     snprintf(lines[0], TEXT_MAX, "%dx%d  \xC2\xB7  %.0f fps", v->width, v->height, v->fps);
     snprintf(ms, sizeof(ms), tr(S_MS_PER_FRAME), v->decode_ms);
     snprintf(lines[1], TEXT_MAX, "%s %s  \xC2\xB7  %s", v->hw ? tr(S_HARDWARE) : tr(S_SOFTWARE),
              codec_label(v->codec), ms);
-    snprintf(lines[2], TEXT_MAX, tr(S_FRAMES_SKIPPED), v->frames, v->dropped);
+    /* the share shown over the last few seconds: a burst of skips fades out again */
+    if (v->shown_percent < 0.0f) {
+        snprintf(shown, sizeof(shown), "\xE2\x80\x94");
+    } else if (v->shown_percent >= 99.95f) {
+        snprintf(shown, sizeof(shown), "100%%");
+    } else {
+        snprintf(shown, sizeof(shown), "%.1f%%", v->shown_percent);
+    }
+    snprintf(lines[2], TEXT_MAX, tr(S_FRAMES_SHOWN), v->frames, shown);
     snprintf(lines[3], TEXT_MAX, "%s  \xC2\xB7  %s", m->ip, m->rx.audio_playing ? tr(S_AUDIO_ON) : tr(S_AUDIO_OFF));
     float w = 0;
     for (int i = 0; i < 4; i++) {
@@ -669,27 +682,27 @@ static void draw_mirroring(const ui_model_t *m) {
 static void draw_settings(const ui_model_t *m) {
     char line[TEXT_MAX];
     fill_rect(-shift_x, -shift_y, base_w, base_h, (SDL_Color) { 0, 0, 0, 180 });
-    const float pw = 840.0f, ph = 470.0f, px = (base_w - pw) / 2.0f, py = (base_h - ph) / 2.0f - 10.0f;
+    const float pw = 840.0f, ph = 576.0f, px = (base_w - pw) / 2.0f, py = (base_h - ph) / 2.0f - 10.0f;
     SDL_Color panel = pal == &PALETTE_BLACK ? (SDL_Color) { 14, 14, 16, 255 } : COL_CARD;
     fill_round_rect(px, py, pw, ph, 24.0f, panel);
     draw_text(F_HEADING, tr(S_SETTINGS), px + 40.0f, py + 30.0f, COL_TEXT, ALIGN_LEFT);
 
     for (int i = 0; i < UI_SETTINGS_ITEMS; i++) {
-        float ry = py + 92.0f + 70.0f * (float) i;
+        float ry = py + 92.0f + 64.0f * (float) i;
         bool sel = i == m->settings_index;
-        if (sel) fill_round_rect(px + 20.0f, ry, pw - 40.0f, 58.0f, 14.0f, with_alpha(COL_ACCENT, 0.28f));
+        if (sel) fill_round_rect(px + 20.0f, ry, pw - 40.0f, 54.0f, 14.0f, with_alpha(COL_ACCENT, 0.28f));
         fit_text(F_BODY, m->settings_labels[i], pw * 0.42f, line, sizeof(line));
-        draw_text_mid(F_BODY, line, px + 44.0f, ry + 29.0f, COL_TEXT, ALIGN_LEFT);
+        draw_text_mid(F_BODY, line, px + 44.0f, ry + 27.0f, COL_TEXT, ALIGN_LEFT);
         float vx = px + pw - 44.0f;
         if (sel) {
-            draw_text_mid(F_BODY, "\xE2\x80\xBA", vx, ry + 29.0f, COL_ACCENT, ALIGN_RIGHT);
+            draw_text_mid(F_BODY, "\xE2\x80\xBA", vx, ry + 27.0f, COL_ACCENT, ALIGN_RIGHT);
             vx -= 26.0f;
         }
         fit_text(F_BODY, m->settings_values[i], pw * 0.45f, line, sizeof(line));
-        float vw = draw_text_mid(F_BODY, line, vx, ry + 29.0f, sel ? COL_TEXT : COL_TEXT_DIM, ALIGN_RIGHT);
-        if (sel) draw_text_mid(F_BODY, "\xE2\x80\xB9", vx - vw - 14.0f, ry + 29.0f, COL_ACCENT, ALIGN_RIGHT);
+        float vw = draw_text_mid(F_BODY, line, vx, ry + 27.0f, sel ? COL_TEXT : COL_TEXT_DIM, ALIGN_RIGHT);
+        if (sel) draw_text_mid(F_BODY, "\xE2\x80\xB9", vx - vw - 14.0f, ry + 27.0f, COL_ACCENT, ALIGN_RIGHT);
     }
-    fit_text(F_SMALL, tr(S_SETTINGS_NOTE), pw - 80.0f, line, sizeof(line));
+    fit_text(F_SMALL, m->settings_note ? m->settings_note : "", pw - 80.0f, line, sizeof(line));
     draw_text(F_SMALL, line, px + 40.0f, py + ph - 100.0f, COL_TEXT_DIM, ALIGN_LEFT);
     float hx = px + 40.0f, hy = py + ph - 58.0f;
     hx = draw_hint(hx, hy, "A", tr(S_CHANGE));
@@ -777,6 +790,9 @@ static void draw_screen(const ui_model_t *m) {
         break;
     case UI_SCREEN_ERROR:
         draw_message_screen(m, COL_RED, "!", tr(S_START_ERROR_TITLE), m->error, NULL);
+        break;
+    case UI_SCREEN_APPLET_MODE:
+        draw_message_screen(m, COL_RED, "!", tr(S_APPLET_TITLE), tr(S_APPLET_LINE1), tr(S_APPLET_LINE2));
         break;
     case UI_SCREEN_READY:
         if (m->rx.state == RECEIVER_VIDEO) {

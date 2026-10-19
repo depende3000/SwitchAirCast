@@ -17,7 +17,8 @@
 ## What it can do
 
 - **Screen mirroring** from iPhone, iPad and Mac, up to 1080p at 60 fps, decoded by the Switch's
-  hardware video decoder.
+  hardware video decoder. The resolution follows the console (720p handheld, 1080p on the TV)
+  or can be fixed in the Settings menu, together with the frame rate.
 - **Send videos instead of mirroring.** Tap the AirPlay button in the YouTube app (iPhone/iPad)
   or in Safari on a Mac and the Switch plays the video by itself. Your device becomes the remote,
   so you can lock it or use other apps meanwhile.
@@ -38,9 +39,9 @@
 
 1. Download `SwitchAirCast.nro` from the [Releases](../../releases) page.
 2. Copy it to the `/switch/` folder on the SD card.
-3. Open the Homebrew Menu **through a game**: hold **R** while starting any game. Starting it
-   from the Album also works, but the Switch then gives homebrew much less memory, which can make
-   video playback fail or the app close.
+3. Open the Homebrew Menu **through a game**: hold **R** while starting any game. From the
+   Album the Switch gives homebrew too little memory to play video, so SwitchAirCast only shows
+   how to open it properly.
 4. Start **SwitchAirCast**. It shows the name it uses on the network (your console's nickname).
 
 ## Using it
@@ -66,7 +67,7 @@ Pause, seek and stop from your device, or with the Switch buttons below.
 
 | Button | What it does |
 | --- | --- |
-| **−** | Settings: language, theme, screen-off timer, vertical mode |
+| **−** | Settings: language, theme, screen-off timer, vertical mode, resolution, frame rate |
 | **+** | Exit |
 | **Y** | Turn the screen off (any button turns it back on) |
 | **R** | While mirroring or playing a video: turn the picture (off → left → right) |
@@ -83,9 +84,14 @@ The Switch does not dim or go to sleep while SwitchAirCast is open.
 
 ## Settings
 
-The Settings menu (**−**) changes the most common options and saves them right away. All
-options live in `/config/SwitchAirCast/config.ini` on the SD card; you can edit that file on a
-computer (changes there apply the next time you start the app).
+The Settings menu (**−**) changes the most common options and saves them right away; the line
+under the list explains the selected one. Resolution and frame rate apply the next time a device
+connects (press **B** to disconnect, then choose the Switch again). With **Automatic**
+resolution the size follows the console: 1280 × 720 in handheld mode and 1920 × 1080 on the TV,
+switching at the next connection after you dock or undock.
+
+All options live in `/config/SwitchAirCast/config.ini` on the SD card; you can edit that file on
+a computer (changes there apply the next time you start the app).
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -94,15 +100,16 @@ computer (changes there apply the next time you start the app).
 | `theme` | `auto` | `auto` (black on the OLED model), `dark` or `black` |
 | `screen_off_minutes` | `5` | Turn the screen off after this many minutes of waiting or music (`0` = never) |
 | `vertical_mode` | `off` | `off`, `auto` (motion sensor, handheld only), `left` or `right` |
-| `width`, `height` | `1920`, `1080` | Picture size asked from your device (`1280` × `720` is lighter on Wi-Fi) |
-| `max_fps` | `60` | Frame rate asked from your device |
+| `resolution` | `auto` | Picture size asked from your device: `auto` (1280 × 720 handheld, 1920 × 1080 docked), `1080p`, `720p`, or `custom` (uses `width` and `height`). Also in the Settings menu |
+| `width`, `height` | `1920`, `1080` | Picture size used with `resolution = custom` |
+| `max_fps` | `60` | Frame rate asked from your device (`60` or `30` in the Settings menu) |
 | `audio` | `true` | Play sound on the Switch |
 | `video_casting` | `true` | Accept videos sent from YouTube / Safari |
 | `video_language` | `default` | Audio track for videos with several languages: `default` (the video's own), `system` (console language), or language codes such as `es:en` |
 | `hw_decode` | `true` | Use the hardware video decoder (turn off only for troubleshooting) |
 | `show_stats` | `false` | Start with the technical info visible |
 | `port` | `7000` | Network port |
-| `debug_log` | `false` | Write a very detailed log (for bug reports) |
+| `debug_log` | `false` | Write a very detailed log (for bug reports), and keep the last 10 runs in `logs/` |
 
 ## Troubleshooting
 
@@ -111,11 +118,12 @@ guest network, which usually keeps devices apart). Wait a few seconds after star
 restart it. Some routers block devices from finding each other; look for "AP isolation" or
 "client isolation" in the router settings and turn it off.
 
-**The app closes or a video won't start.** Open the Homebrew Menu through a game (hold **R**
-while starting one) rather than from the Album; see [Install](#install).
+**"Open SwitchAirCast through a game" appears.** It was started from the Album. Press **+**,
+then open the Homebrew Menu by holding **R** while starting any game; see [Install](#install).
 
-**The picture stutters.** Move closer to the router or set `width = 1280` and `height = 720`
-in `config.ini`.
+**The picture stutters.** Move closer to the router, or open Settings (**−**) and choose
+**Resolution** 1280 × 720 or **Frame rate** 30 fps, then reconnect. Press **X** while
+mirroring to see the share of frames that reach the screen (over the last 5 seconds).
 
 **Black screen in Netflix, Disney+, Apple TV+ and similar apps.** These apps block mirroring of
 their videos, and their AirPlay streams are encrypted (FairPlay), so the Switch cannot play
@@ -141,7 +149,9 @@ after a minute, or press any button to hide it.
 **Reporting a bug.** Please attach `log.txt` and `log-previous.txt` from
 `/config/SwitchAirCast/` (the second one is the run before, useful after a crash) and, if the
 app crashed, the newest file in `/atmosphere/crash_reports/`. Setting `debug_log = true` makes
-the log much more detailed.
+the log much more detailed and also keeps the last 10 runs as
+`/config/SwitchAirCast/logs/log-<date>_<time>.txt`. While mirroring or playing a video, the log
+gets a line every 5 seconds with the frame rate and how many frames were skipped.
 
 ## Limitations
 

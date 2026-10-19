@@ -2,8 +2,9 @@
  * SwitchAirCast - video decoding
  *
  * Two modes share one decoder thread and one NVDEC device:
- *  - mirroring: Annex-B access units from the AirPlay mirror stream; the newest
- *    decoded frame replaces any frame the screen has not picked up yet.
+ *  - mirroring: Annex-B access units from the AirPlay mirror stream; decoded frames
+ *    wait in a queue of a few frames, shown one per screen refresh, so frames that
+ *    arrive in a burst (Wi-Fi jitter) are spread out instead of dropped.
  *  - stream:    timestamped packets from the media player (AirPlay video); decoded
  *    frames wait in a short queue until the playback clock reaches them.
  *
@@ -32,6 +33,10 @@
 #define QUEUE_MAX 512
 /* mirroring: block the network thread sooner, about one second at 60 fps */
 #define MIRROR_QUEUE_LIMIT 64
+/* mirroring: decoded frames waiting for the screen; when full the oldest is dropped */
+#define MIRROR_FRAMES_MAX 3
+/* mirroring: a backlog that never clears for this long is cut by one frame (latency) */
+#define MIRROR_BACKLOG_US 500000
 /* stream mode: decoded frames waiting for their presentation time */
 #define FRAME_FIFO_MAX 8
 /* a frame this close to its time is shown now rather than on the next vsync */
@@ -62,7 +67,10 @@ static pthread_t worker;
 static video_mode_t mode = MODE_MIRROR;
 static int stream_session = 0;
 
-static AVFrame *pending = NULL;              /* mirroring: newest frame */
+static AVFrame *mirror_frames[MIRROR_FRAMES_MAX]; /* mirroring: frames in decode order */
+static int mirror_head = 0;
+static int mirror_count = 0;
+static uint64_t mirror_backlog_since = 0;    /* mirroring: when more than one frame began waiting */
 static AVFrame *fifo[FRAME_FIFO_MAX];        /* stream: frames in presentation order */
 static int fifo_head = 0;
 static int fifo_count = 0;
@@ -82,6 +90,11 @@ static uint64_t fps_window_start = 0;
 static unsigned long fps_window_frames = 0;
 static double decode_time_total = 0.0;
 static unsigned long decode_time_count = 0;
+/* shown_percent: frames decoded and dropped in each of the last few one-second windows */
+#define SHOWN_WINDOWS 5
+static unsigned long window_frames[SHOWN_WINDOWS], window_dropped[SHOWN_WINDOWS];
+static int window_index = 0, windows_filled = 0;
+static unsigned long window_dropped_start = 0;
 
 static void *decode_thread(void *arg);
 
@@ -188,6 +201,9 @@ bool video_init(bool allow_hw) {
 
 static void reset_stats_locked(void) {
     memset(&stats, 0, sizeof(stats));
+    stats.shown_percent = -1.0f;
+    window_index = windows_filled = 0;
+    window_dropped_start = 0;
     fps_window_start = 0;
     fps_window_frames = 0;
     decode_time_total = 0.0;
@@ -202,7 +218,12 @@ static void clear_outputs_locked(int64_t new_skip_until) {
         queue_head = (queue_head + 1) % QUEUE_MAX;
         queue_count--;
     }
-    av_frame_free(&pending);
+    while (mirror_count > 0) {
+        av_frame_free(&mirror_frames[mirror_head]);
+        mirror_head = (mirror_head + 1) % MIRROR_FRAMES_MAX;
+        mirror_count--;
+    }
+    mirror_backlog_since = 0;
     while (fifo_count > 0) {
         av_frame_free(&fifo[fifo_head]);
         fifo_head = (fifo_head + 1) % FRAME_FIFO_MAX;
@@ -306,6 +327,18 @@ static void update_stats_locked(const AVFrame *frame, uint64_t started) {
     fps_window_frames++;
     if (t - fps_window_start >= 1000000ULL) {
         stats.fps = (float) ((double) fps_window_frames * 1e6 / (double) (t - fps_window_start));
+        window_frames[window_index] = fps_window_frames;
+        window_dropped[window_index] = stats.dropped - window_dropped_start;
+        window_dropped_start = stats.dropped;
+        window_index = (window_index + 1) % SHOWN_WINDOWS;
+        if (windows_filled < SHOWN_WINDOWS) windows_filled++;
+        unsigned long f = 0, d = 0;
+        for (int i = 0; i < windows_filled; i++) {
+            f += window_frames[i];
+            d += window_dropped[i];
+        }
+        if (d > f) d = f;
+        stats.shown_percent = f ? (float) (100.0 * (double) (f - d) / (double) f) : -1.0f;
         stats.decode_ms = (float) (decode_time_total / (double) decode_time_count);
         fps_window_start = t;
         fps_window_frames = 0;
@@ -324,11 +357,14 @@ static void output_frame(AVFrame *frame, uint64_t started, unsigned packet_gen) 
     }
     update_stats_locked(frame, started);
     if (mode == MODE_MIRROR) {
-        if (pending) {
-            av_frame_free(&pending);
+        if (mirror_count == MIRROR_FRAMES_MAX) {
+            av_frame_free(&mirror_frames[mirror_head]);
+            mirror_head = (mirror_head + 1) % MIRROR_FRAMES_MAX;
+            mirror_count--;
             stats.dropped++;
         }
-        pending = frame;
+        mirror_frames[(mirror_head + mirror_count) % MIRROR_FRAMES_MAX] = frame;
+        mirror_count++;
         pthread_mutex_unlock(&state_mutex);
         return;
     }
@@ -490,9 +526,29 @@ bool video_send_packet(int session, const AVPacket *pkt) {
 }
 
 AVFrame *video_take_frame(void) {
+    AVFrame *frame = NULL;
     pthread_mutex_lock(&state_mutex);
-    AVFrame *frame = pending;
-    pending = NULL;
+    if (mirror_count > 1) {
+        /* the screen keeps showing frames late: skip one to catch up with the phone */
+        uint64_t t = now_us();
+        if (!mirror_backlog_since) {
+            mirror_backlog_since = t;
+        } else if (t - mirror_backlog_since >= MIRROR_BACKLOG_US) {
+            av_frame_free(&mirror_frames[mirror_head]);
+            mirror_head = (mirror_head + 1) % MIRROR_FRAMES_MAX;
+            mirror_count--;
+            stats.dropped++;
+            mirror_backlog_since = 0;
+        }
+    } else {
+        mirror_backlog_since = 0;
+    }
+    if (mirror_count > 0) {
+        frame = mirror_frames[mirror_head];
+        mirror_frames[mirror_head] = NULL;
+        mirror_head = (mirror_head + 1) % MIRROR_FRAMES_MAX;
+        mirror_count--;
+    }
     pthread_mutex_unlock(&state_mutex);
     return frame;
 }
@@ -555,6 +611,7 @@ bool video_stream_finished(void) {
 void video_get_stats(video_stats_t *out) {
     pthread_mutex_lock(&state_mutex);
     *out = stats;
+    if (!stats.frames) out->shown_percent = -1.0f;
     if (!stats.frames) {
         out->hw = cur_hw;
         out->codec = avcodec_get_name(cur_codec);

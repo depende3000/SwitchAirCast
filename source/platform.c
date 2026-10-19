@@ -9,6 +9,7 @@
 
 #include "platform.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <math.h>
 #include <pthread.h>
@@ -32,6 +33,7 @@
 
 static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 static FILE *log_file = NULL;
+static FILE *history_file = NULL;   /* logs/log-<date>_<time>.txt, debug logging only */
 static char data_dir[512];
 
 /* Keeps the previous run's log (log-previous.txt) so a crash can still be diagnosed
@@ -43,6 +45,14 @@ static void open_log(void) {
     remove(prev);
     rename(path, prev);
     log_file = fopen(path, "w");
+}
+
+static void close_logs(void) {
+    pthread_mutex_lock(&log_mutex);
+    if (log_file) fclose(log_file);
+    if (history_file) fclose(history_file);
+    log_file = history_file = NULL;
+    pthread_mutex_unlock(&log_mutex);
 }
 
 static void copy_file(const char *from, const char *to) {
@@ -193,8 +203,7 @@ void platform_exit(void) {
     if (have_nifm) nifmExit();
     if (nxlink_fd >= 0) close(nxlink_fd);
     socketExit();
-    if (log_file) fclose(log_file);
-    log_file = NULL;
+    close_logs();
 }
 
 bool platform_get_ip(char *buf, size_t len) {
@@ -234,6 +243,11 @@ void platform_get_language_tag(char *buf, size_t len) {
 bool platform_is_oled(void) {
     SetSysProductModel model = SetSysProductModel_Invalid;
     return have_setsys && R_SUCCEEDED(setsysGetProductModel(&model)) && model == SetSysProductModel_Aula;
+}
+
+bool platform_is_applet_mode(void) {
+    AppletType type = appletGetAppletType();
+    return type != AppletType_Application && type != AppletType_SystemApplication;
 }
 
 bool platform_is_handheld(void) {
@@ -339,8 +353,7 @@ bool platform_init(void) {
 void platform_exit(void) {
     free(font_data);
     font_data = NULL;
-    if (log_file) fclose(log_file);
-    log_file = NULL;
+    close_logs();
 }
 
 bool platform_get_ip(char *buf, size_t len) {
@@ -391,8 +404,12 @@ bool platform_is_oled(void) {
     return getenv("SWITCHCAST_OLED") != NULL;
 }
 
+bool platform_is_applet_mode(void) {
+    return getenv("SWITCHCAST_APPLET") != NULL;
+}
+
 bool platform_is_handheld(void) {
-    return false;
+    return getenv("SWITCHCAST_HANDHELD") != NULL;
 }
 
 void platform_set_backlight(bool on) {
@@ -475,6 +492,59 @@ const char *platform_data_dir(void) {
     return data_dir;
 }
 
+static int compare_names(const void *a, const void *b) {
+    return strcmp(*(char *const *) a, *(char *const *) b);
+}
+
+/* Deletes the oldest log-*.txt files in dir until at most `keep` remain. The names
+ * carry the date and time, so they sort oldest first. */
+static void prune_log_history(const char *dir, int keep) {
+    DIR *d = opendir(dir);
+    if (!d) return;
+    char *names[256];
+    int n = 0;
+    struct dirent *e;
+    while ((e = readdir(d)) != NULL && n < (int) (sizeof(names) / sizeof(names[0]))) {
+        size_t len = strlen(e->d_name);
+        if (len > 8 && !strncmp(e->d_name, "log-", 4) && !strcmp(e->d_name + len - 4, ".txt")) {
+            names[n] = strdup(e->d_name);
+            if (names[n]) n++;
+        }
+    }
+    closedir(d);
+    qsort(names, (size_t) n, sizeof(names[0]), compare_names);
+    for (int i = 0; i < n; i++) {
+        if (i < n - keep) {
+            char path[1024];
+            snprintf(path, sizeof(path), "%s/%s", dir, names[i]);
+            remove(path);
+        }
+        free(names[i]);
+    }
+}
+
+void platform_keep_log_history(int keep) {
+    if (keep < 1 || history_file) return;
+    char dir[600], path[700], stamp[32], log_path[600];
+    snprintf(dir, sizeof(dir), "%s/logs", data_dir);
+    mkdir(dir, 0777);
+    time_t now = time(NULL);
+    struct tm tm;
+    localtime_r(&now, &tm);
+    strftime(stamp, sizeof(stamp), "%Y-%m-%d_%H-%M-%S", &tm);
+    snprintf(path, sizeof(path), "%s/log-%s.txt", dir, stamp);
+    snprintf(log_path, sizeof(log_path), "%s/log.txt", data_dir);
+    prune_log_history(dir, keep - 1);
+
+    /* start with what this run logged before the settings were read */
+    pthread_mutex_lock(&log_mutex);
+    if (log_file) fflush(log_file);
+    copy_file(log_path, path);
+    history_file = fopen(path, "a");
+    pthread_mutex_unlock(&log_mutex);
+    platform_log("log: also writing %s (the newest %d are kept)", path, keep);
+}
+
 void platform_log(const char *fmt, ...) {
     char line[1024];
     va_list ap;
@@ -491,6 +561,10 @@ void platform_log(const char *fmt, ...) {
     if (log_file) {
         fprintf(log_file, "[%5ld.%03ld] %s\n", (long) ts.tv_sec, ts.tv_nsec / 1000000L, line);
         fflush(log_file);
+    }
+    if (history_file) {
+        fprintf(history_file, "[%5ld.%03ld] %s\n", (long) ts.tv_sec, ts.tv_nsec / 1000000L, line);
+        fflush(history_file);
     }
     pthread_mutex_unlock(&log_mutex);
 }

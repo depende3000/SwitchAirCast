@@ -79,6 +79,8 @@ int main(int argc, char **argv) {
     m.screen = UI_SCREEN_ERROR;
     m.error = "Could not open a network port for AirPlay.";
     frame(&m, dir, "3_error", w, h);
+    m.screen = UI_SCREEN_APPLET_MODE;
+    frame(&m, dir, "3b_applet_mode", w, h);
 
     m.screen = UI_SCREEN_READY;
     m.rx.state = RECEIVER_WAITING;
@@ -120,6 +122,7 @@ int main(int argc, char **argv) {
     m.video.decode_ms = 3.2f;
     m.video.frames = 12345;
     m.video.dropped = 12;
+    m.video.shown_percent = 99.6f;
     frame(&m, dir, "10_mirroring_stats", w, h);
 
     /* AirPlay video */
@@ -152,11 +155,35 @@ int main(int argc, char **argv) {
     m.settings_labels[1] = tr(S_SET_THEME);
     m.settings_labels[2] = tr(S_SET_SCREEN_OFF);
     m.settings_labels[3] = tr(S_SET_ROTATION);
+    m.settings_labels[4] = tr(S_SET_RESOLUTION);
+    m.settings_labels[5] = tr(S_SET_FRAME_RATE);
     snprintf(m.settings_values[0], 64, "%s", tr(S_VAL_AUTOMATIC));
     snprintf(m.settings_values[1], 64, "%s", tr(S_VAL_THEME_BLACK));
     snprintf(m.settings_values[2], 64, tr(S_VAL_MINUTES), 5);
     snprintf(m.settings_values[3], 64, "%s", tr(S_VAL_ROTATION_AUTO));
-    frame(&m, dir, "14_settings", w, h);
+    snprintf(m.settings_values[4], 64, tr(S_VAL_RESOLUTION_AUTO), 1280, 720);
+    snprintf(m.settings_values[5], 64, "60 fps");
+    /* every row selected with its note (the same notes as main.c's settings menu) */
+    static const str_id_t notes[UI_SETTINGS_ITEMS] = { S_SETTINGS_NOTE_LANGUAGE, S_SETTINGS_NOTE_THEME,
+                                                       S_SETTINGS_NOTE, S_SETTINGS_NOTE_ROTATION,
+                                                       S_SETTINGS_NOTE_RESOLUTION, S_SETTINGS_NOTE_VIDEO };
+    for (int i = 0; i < UI_SETTINGS_ITEMS; i++) {
+        char name[32];
+        m.settings_index = i;
+        m.settings_note = tr(notes[i]);
+        snprintf(name, sizeof(name), "14_settings_%d", i);
+        frame(&m, dir, name, w, h);
+    }
+    /* the longest values each row can show */
+    snprintf(m.settings_values[0], 64, "%s", tr(S_VAL_SPANISH));
+    snprintf(m.settings_values[1], 64, "%s", tr(S_VAL_THEME_DARK));
+    snprintf(m.settings_values[2], 64, "%s", tr(S_VAL_NEVER));
+    snprintf(m.settings_values[3], 64, "%s", tr(S_VAL_ROTATE_RIGHT));
+    snprintf(m.settings_values[4], 64, tr(S_VAL_RESOLUTION_AUTO), 1920, 1080);
+    snprintf(m.settings_values[5], 64, "30 fps");
+    m.settings_index = 3;
+    m.settings_note = tr(notes[3]);
+    frame(&m, dir, "14_settings_long_values", w, h);
     m.settings_open = false;
 
     /* vertical mode: a portrait phone stream rotated to fill the screen */
@@ -203,6 +230,33 @@ int main(int argc, char **argv) {
     frame(&m, dir, "19_options_hint", w, h);
     m.mirror_started_ms = m.now_ms - 1000;
     frame(&m, dir, "20_options_hint_under_toast", w, h);
+
+    /* every toast and start-up error, to catch text that does not fit */
+    static const str_id_t toasts[] = { S_SCREEN_OFF_TOAST, S_ROTATION_TOAST_OFF, S_ROTATION_TOAST_LEFT,
+                                       S_ROTATION_TOAST_RIGHT };
+    m.options_hint_ms = 0;
+    m.mirror_started_ms = 0;
+    for (size_t i = 0; i < sizeof(toasts) / sizeof(toasts[0]); i++) {
+        char name[32];
+        m.toast = tr(toasts[i]);
+        m.toast_ms = m.now_ms - 500;
+        snprintf(name, sizeof(name), "22_toast_%zu", i);
+        frame(&m, dir, name, w, h);
+    }
+    m.toast = NULL;
+    static char errors[4][256];
+    snprintf(errors[0], sizeof(errors[0]), tr(S_ERR_DISCOVERY), -65563);
+    snprintf(errors[1], sizeof(errors[1]), "%s", tr(S_ERR_SERVER));
+    snprintf(errors[2], sizeof(errors[2]), "%s", tr(S_ERR_PORT));
+    snprintf(errors[3], sizeof(errors[3]), tr(S_ERR_ADVERTISE), -65563);
+    m.rx.state = RECEIVER_WAITING;
+    m.screen = UI_SCREEN_ERROR;
+    for (int i = 0; i < 4; i++) {
+        char name[32];
+        m.error = errors[i];
+        snprintf(name, sizeof(name), "23_error_%d", i);
+        frame(&m, dir, name, w, h);
+    }
     m.mirror_started_ms = 0;
     m.rotation = 90;
     m.video_tex = gradient_texture(498, 1080, 60);

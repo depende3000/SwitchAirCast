@@ -31,6 +31,9 @@ typedef enum {
     S_NO_NETWORK_LINE1,
     S_NO_NETWORK_LINE2,
     S_START_ERROR_TITLE,
+    S_APPLET_TITLE,
+    S_APPLET_LINE1,
+    S_APPLET_LINE2,
     S_ERR_DISCOVERY,          /* %d */
     S_ERR_SERVER,
     S_ERR_PORT,
@@ -62,13 +65,15 @@ typedef enum {
     S_HARDWARE,
     S_SOFTWARE,
     S_MS_PER_FRAME,           /* %.1f */
-    S_FRAMES_SKIPPED,         /* %lu %lu */
+    S_FRAMES_SHOWN,           /* %lu %s */
     S_AUDIO_ON,
     S_AUDIO_OFF,
     S_SET_LANGUAGE,
     S_SET_THEME,
     S_SET_SCREEN_OFF,
     S_SET_ROTATION,
+    S_SET_RESOLUTION,
+    S_SET_FRAME_RATE,
     S_VAL_AUTOMATIC,
     S_VAL_ENGLISH,
     S_VAL_SPANISH,
@@ -80,9 +85,15 @@ typedef enum {
     S_VAL_ROTATION_AUTO,
     S_VAL_ROTATE_LEFT,
     S_VAL_ROTATE_RIGHT,
+    S_VAL_RESOLUTION_AUTO,    /* %d %d */
     S_CHANGE,
     S_CLOSE,
     S_SETTINGS_NOTE,
+    S_SETTINGS_NOTE_LANGUAGE,
+    S_SETTINGS_NOTE_THEME,
+    S_SETTINGS_NOTE_ROTATION,
+    S_SETTINGS_NOTE_RESOLUTION,
+    S_SETTINGS_NOTE_VIDEO,
     S_SCREEN_OFF_TOAST,
     S_ROTATION_TOAST_OFF,
     S_ROTATION_TOAST_LEFT,
@@ -91,6 +102,7 @@ typedef enum {
     S_PIN_HINT,
     S_HINT_PRESS,
     S_HINT_OPEN_SETTINGS,
+    S_VERSION_BY,             /* %s version, %s author */
     S_COUNT
 } str_id_t;
 

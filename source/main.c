@@ -212,10 +212,15 @@ static void update_coverart(const receiver_status_t *rx) {
     }
 }
 
+/* debug logging keeps this many runs as logs/log-<date>_<time>.txt */
+#define LOG_HISTORY_MAX 10
+
 /* ---- settings ---- */
 
 static const int screen_off_choices[] = { 0, 1, 2, 5, 10, 15, 30 };
 #define SCREEN_OFF_CHOICES ((int) (sizeof(screen_off_choices) / sizeof(screen_off_choices[0])))
+static const int fps_choices[] = { 60, 30 };
+#define FPS_CHOICES ((int) (sizeof(fps_choices) / sizeof(fps_choices[0])))
 
 static void apply_language(const config_t *cfg) {
     char tag[32];
@@ -242,6 +247,8 @@ static void fill_settings(ui_model_t *m, const config_t *cfg) {
     m->settings_labels[1] = tr(S_SET_THEME);
     m->settings_labels[2] = tr(S_SET_SCREEN_OFF);
     m->settings_labels[3] = tr(S_SET_ROTATION);
+    m->settings_labels[4] = tr(S_SET_RESOLUTION);
+    m->settings_labels[5] = tr(S_SET_FRAME_RATE);
     snprintf(m->settings_values[0], sizeof(m->settings_values[0]), "%s", tr(language_values[cfg->language]));
     snprintf(m->settings_values[1], sizeof(m->settings_values[1]), "%s", tr(theme_values[cfg->theme]));
     if (cfg->screen_off_minutes > 0) {
@@ -250,6 +257,18 @@ static void fill_settings(ui_model_t *m, const config_t *cfg) {
         snprintf(m->settings_values[2], sizeof(m->settings_values[2]), "%s", tr(S_VAL_NEVER));
     }
     snprintf(m->settings_values[3], sizeof(m->settings_values[3]), "%s", tr(rotation_values[cfg->rotation]));
+    int w, h;
+    config_video_size(cfg, platform_is_handheld(), &w, &h);
+    if (cfg->resolution == RESOLUTION_AUTO) {
+        snprintf(m->settings_values[4], sizeof(m->settings_values[4]), tr(S_VAL_RESOLUTION_AUTO), w, h);
+    } else {
+        snprintf(m->settings_values[4], sizeof(m->settings_values[4]), "%d \xC3\x97 %d", w, h);
+    }
+    snprintf(m->settings_values[5], sizeof(m->settings_values[5]), "%d fps", cfg->max_fps);
+    static const str_id_t notes[UI_SETTINGS_ITEMS] = { S_SETTINGS_NOTE_LANGUAGE, S_SETTINGS_NOTE_THEME,
+                                                       S_SETTINGS_NOTE, S_SETTINGS_NOTE_ROTATION,
+                                                       S_SETTINGS_NOTE_RESOLUTION, S_SETTINGS_NOTE_VIDEO };
+    m->settings_note = tr(notes[m->settings_index]);
 }
 
 /* Steps setting `item` forwards (dir 1) or backwards (dir -1). */
@@ -273,6 +292,21 @@ static void change_setting(config_t *cfg, int item, int dir) {
     case 3:
         cfg->rotation = (rotation_mode_t) ((cfg->rotation + 4 + dir) % 4);
         break;
+    case 4:
+        /* automatic, 1080p, 720p; a custom size from config.ini steps to automatic */
+        if (cfg->resolution == RESOLUTION_CUSTOM) {
+            cfg->resolution = RESOLUTION_AUTO;
+        } else {
+            cfg->resolution = (resolution_mode_t) ((cfg->resolution + 3 + dir) % 3);
+        }
+        break;
+    case 5: {
+        int k = 0;
+        while (k < FPS_CHOICES && fps_choices[k] != cfg->max_fps) k++;
+        k = k == FPS_CHOICES ? 0 : (k + FPS_CHOICES + dir) % FPS_CHOICES;
+        cfg->max_fps = fps_choices[k];
+        break;
+    }
     }
 }
 
@@ -285,6 +319,70 @@ static int rotation_degrees(const config_t *cfg) {
         return r > 0 ? r : 0;
     }
     default: return 0;
+    }
+}
+
+/* ---- video statistics in the log (the overlay shows them only while it is open) ---- */
+
+#define STATS_LOG_MS 5000
+
+typedef struct {
+    bool active;                                 /* mirroring or video in progress */
+    unsigned long seen_frames, seen_dropped;     /* video stats at the last check */
+    unsigned long frames, dropped;               /* since the last log line */
+    unsigned long total_frames, total_dropped;   /* since mirroring/video began */
+    unsigned long started_ms, interval_ms;
+} stats_log_t;
+
+static double percent(unsigned long part, unsigned long whole) {
+    return whole ? 100.0 * (double) part / (double) whole : 0.0;
+}
+
+/* Adds what the decoder did since the last call and logs it every few seconds, plus a
+ * summary when mirroring/video ends. The video stats restart from zero on every flush,
+ * so only the increase since the last call is counted. */
+static void track_video_stats(stats_log_t *s, const ui_model_t *m, const int asked[3], unsigned long now) {
+    bool video = m->rx.state == RECEIVER_VIDEO;
+    bool active = video || m->rx.state == RECEIVER_MIRRORING;
+    const video_stats_t *v = &m->video;
+    if (active && !s->active) {
+        memset(s, 0, sizeof(*s));
+        s->active = true;
+        s->started_ms = s->interval_ms = now;
+        s->seen_frames = v->frames;
+        s->seen_dropped = v->dropped;
+        platform_log("stats: %s started, asking %dx%d at %d fps", video ? "video" : "mirroring", asked[0], asked[1],
+                     asked[2]);
+        return;
+    }
+    if (!s->active) return;
+
+    unsigned long df = v->frames >= s->seen_frames ? v->frames - s->seen_frames : v->frames;
+    unsigned long dd = v->dropped >= s->seen_dropped ? v->dropped - s->seen_dropped : v->dropped;
+    s->seen_frames = v->frames;
+    s->seen_dropped = v->dropped;
+    s->frames += df;
+    s->dropped += dd;
+    s->total_frames += df;
+    s->total_dropped += dd;
+
+    if (!active) {
+        double secs = (double) (now - s->started_ms) / 1000.0;
+        platform_log("stats: ended after %.0f s: %lu frames decoded, %lu skipped (%.1f%%), %.1f fps shown on average",
+                     secs, s->total_frames, s->total_dropped, percent(s->total_dropped, s->total_frames),
+                     secs > 0.0 ? (double) (s->total_frames - s->total_dropped) / secs : 0.0);
+        s->active = false;
+        return;
+    }
+    if (now - s->interval_ms >= STATS_LOG_MS) {
+        double secs = (double) (now - s->interval_ms) / 1000.0;
+        platform_log("stats: %dx%d %s %s, %.1f fps decoded, %.1f fps shown, %lu of %lu skipped (%.1f%%), "
+                     "%.1f ms/frame",
+                     v->width, v->height, v->codec ? v->codec : "-", v->hw ? "hw" : "sw",
+                     (double) s->frames / secs, (double) (s->frames - s->dropped) / secs, s->dropped, s->frames,
+                     percent(s->dropped, s->frames), v->decode_ms);
+        s->frames = s->dropped = 0;
+        s->interval_ms = now;
     }
 }
 
@@ -304,6 +402,7 @@ int main(int argc, char **argv) {
     char path[600];
     snprintf(path, sizeof(path), "%s/config.ini", platform_data_dir());
     config_load(&cfg, path);
+    if (cfg.debug_log) platform_keep_log_history(LOG_HISTORY_MAX);
     apply_language(&cfg);
     apply_theme(&cfg);
 
@@ -340,8 +439,14 @@ int main(int argc, char **argv) {
     for (int i = 0; i < SDL_NumJoysticks(); i++) SDL_JoystickOpen(i);
 
     bool ui_ok = ui_init(renderer);
-    if (!video_init(cfg.hw_decode)) platform_log("main: video decoder init failed");
-    if (cfg.audio && !audio_init()) cfg.audio = false;
+    /* from the Album there is too little memory for video: explain how to open the app instead */
+    bool applet = platform_is_applet_mode();
+    if (applet) {
+        platform_log("main: started in applet mode, not starting the receiver");
+    } else {
+        if (!video_init(cfg.hw_decode)) platform_log("main: video decoder init failed");
+        if (cfg.audio && !audio_init()) cfg.audio = false;
+    }
 
     ui_model_t model;
     memset(&model, 0, sizeof(model));
@@ -358,6 +463,9 @@ int main(int argc, char **argv) {
     bool running = true;
     unsigned long last_activity = now_ms();
     unsigned wake_seen = platform_screen_wake_count();
+    stats_log_t stats_log;
+    int asked[3] = { 0, 0, 0 };   /* width, height and fps the receiver asks senders for */
+    memset(&stats_log, 0, sizeof(stats_log));
 
     platform_set_keep_awake(true);
 
@@ -463,6 +571,7 @@ int main(int argc, char **argv) {
                 running = false;
                 break;
             case ACT_SETTINGS:
+                if (applet) break;   /* nothing to set up: the receiver does not run */
                 model.settings_open = true;
                 model.settings_index = 0;
                 model.options_hint_ms = 0;
@@ -518,12 +627,20 @@ int main(int argc, char **argv) {
         }
         model.ip = ip;
 
-        if (!started) {
+        if (applet) {
+            model.screen = UI_SCREEN_APPLET_MODE;
+        } else if (!started) {
             if (!strcmp(ip, "-")) {
                 model.screen = UI_SCREEN_NO_NETWORK;
             } else if (now >= next_start_try || retry) {
-                if (receiver_start(&cfg, name, error, sizeof(error))) {
+                /* the size follows the console's mode when the setting is automatic */
+                config_t rx_cfg = cfg;
+                config_video_size(&cfg, platform_is_handheld(), &rx_cfg.width, &rx_cfg.height);
+                if (receiver_start(&rx_cfg, name, error, sizeof(error))) {
                     started = true;
+                    asked[0] = rx_cfg.width;
+                    asked[1] = rx_cfg.height;
+                    asked[2] = rx_cfg.max_fps;
                     model.screen = UI_SCREEN_READY;
                 } else {
                     platform_log("main: %s", error);
@@ -537,6 +654,16 @@ int main(int argc, char **argv) {
             receiver_get_status(&model.rx);
             video_get_stats(&model.video);
             update_coverart(&model.rx);
+            /* a setting changed or the console was docked/undocked: the next device gets it */
+            int w, h;
+            config_video_size(&cfg, platform_is_handheld(), &w, &h);
+            if (w != asked[0] || h != asked[1] || cfg.max_fps != asked[2]) {
+                receiver_set_video_size(w, h, cfg.max_fps);
+                asked[0] = w;
+                asked[1] = h;
+                asked[2] = cfg.max_fps;
+            }
+            track_video_stats(&stats_log, &model, asked, now);
 
             player_get_status(&model.player);
 

@@ -60,7 +60,9 @@ static player_request_t *pending_play = NULL;
 static bool pending_video_stop = false;
 static uint64_t video_ended_ms = 0;
 static char hls_languages[64];
-static char hls_profile[64];
+/* two buffers: a new profile never overwrites the one a library thread may be reading */
+static char hls_profile_buf[2][64];
+static const char *hls_profile = "";
 
 static void request_video_stop(void) {
     pthread_mutex_lock(&mutex);
@@ -442,6 +444,12 @@ static void get_custom_profile(void *cls, const char **custom_profile) {
     *custom_profile = hls_profile;
 }
 
+static void set_hls_profile(int height) {
+    char *buf = hls_profile_buf[hls_profile == hls_profile_buf[0] ? 1 : 0];
+    snprintf(buf, sizeof(hls_profile_buf[0]), "AVC:%d:HEVC:0:VP9:0:AV1:0", height);
+    hls_profile = buf;
+}
+
 static void log_callback(void *cls, int level, const char *msg) {
     platform_log("%s", msg);
 }
@@ -583,7 +591,7 @@ bool receiver_start(const config_t *cfg, const char *name, char *err, size_t err
             snprintf(hls_languages, sizeof(hls_languages), "%s", cfg->video_language);
         }
         raop_set_lang(raop, NULL, NULL, hls_languages);
-        snprintf(hls_profile, sizeof(hls_profile), "AVC:%d:HEVC:0:VP9:0:AV1:0", cfg->height);
+        set_hls_profile(cfg->height);
         platform_log("receiver: AirPlay video enabled (languages %s, profile %s)", hls_languages, hls_profile);
     }
 
@@ -617,6 +625,19 @@ bool receiver_start(const config_t *cfg, const char *name, char *err, size_t err
 fail:
     receiver_stop();
     return false;
+}
+
+void receiver_set_video_size(int width, int height, int max_fps) {
+    config.width = width;
+    config.height = height;
+    config.max_fps = max_fps;
+    if (!raop) return;
+    /* the library reads these for every /info request, so the next device gets them */
+    raop_set_plist(raop, "width", width);
+    raop_set_plist(raop, "height", height);
+    raop_set_plist(raop, "maxFPS", max_fps);
+    if (config.video_casting) set_hls_profile(height);
+    platform_log("receiver: next connections get %dx%d at %d fps", width, height, max_fps);
 }
 
 void receiver_stop(void) {

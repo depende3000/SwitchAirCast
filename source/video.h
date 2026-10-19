@@ -25,6 +25,7 @@ typedef struct {
     const char *codec;      /* FFmpeg codec name, e.g. "h264" */
     unsigned long frames;   /* frames decoded since the stream started */
     unsigned long dropped;  /* frames decoded but never shown (screen behind) */
+    float shown_percent;    /* share of decoded frames shown over the last few seconds, -1 until known */
     float decode_ms;        /* average decode + copy time per frame */
 } video_stats_t;
 
@@ -45,8 +46,9 @@ int video_set_codec(bool h265);
  * thread. Called from the AirPlay mirroring thread; blocks if the queue is full. */
 void video_decode(const uint8_t *data, int len);
 
-/* Main thread: returns the newest decoded frame (NV12 or YUV420P), or NULL if no new
- * frame arrived. The caller owns the frame and frees it with av_frame_free(). */
+/* Main thread, once per screen refresh: returns the next decoded frame (NV12 or
+ * YUV420P), or NULL if no new frame arrived. Frames that arrived together come out on
+ * successive calls. The caller owns the frame and frees it with av_frame_free(). */
 AVFrame *video_take_frame(void);
 
 /* ---- media playback (AirPlay video) ---- */
