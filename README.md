@@ -121,6 +121,20 @@ in `config.ini`.
 their videos, and their AirPlay streams are encrypted (FairPlay), so the Switch cannot play
 them. YouTube works.
 
+**A video file from QuickTime Player on a Mac doesn't play.** If you choose the Switch with
+QuickTime's AirPlay button for a movie stored on the Mac, nothing plays on the Switch and
+QuickTime goes back to playing the movie on the Mac. For files on the Mac, macOS
+itself serves the movie to the receiver, and on macOS 27.0 that fails inside macOS: its log
+shows `Stream file … error: EPERM` from `AirPlayXPCHelper` (the Mac's AirPlay service is not
+allowed to open the file). Moving the file or removing its quarantine flag doesn't help.
+Workaround: mirror the Mac instead.
+
+1. Open Control Center → **Screen Mirroring** and choose your Switch.
+2. Play the movie in QuickTime Player and press **⌃⌘F** for full screen.
+
+Sound goes to the Switch too. Videos from the internet sent with Safari's AirPlay button are
+not affected and play normally.
+
 **A Mac asks for a code.** Type the 4 digits shown on the Switch. The code disappears by itself
 after a minute, or press any button to hide it.
 
@@ -133,6 +147,8 @@ the log much more detailed.
 
 - Videos are played up to 1080p in H.264. YouTube's 4K (VP9/AV1) versions are skipped, and 4K
   (H.265) mirroring is not supported.
+- Movie files sent from QuickTime Player on a Mac don't play (see
+  [Troubleshooting](#troubleshooting)); mirror the Mac's screen instead.
 - Anyone on your network can mirror to the Switch while the app is open. Macs need the one-time
   code before sending videos; iPhones and iPads connect without one.
 
