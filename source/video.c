@@ -41,6 +41,9 @@
 #define FRAME_FIFO_MAX 8
 /* a frame this close to its time is shown now rather than on the next vsync */
 #define PRESENT_EARLY_US 8000
+/* a frame is skipped only once the one after it is this late (half a 60 Hz refresh), so
+ * timing jitter shows a frame one refresh late instead of skipping it */
+#define SKIP_LATE_US 8000
 /* FFmpeg's H.264/HEVC decoders want more than libnx's default 128 KiB thread stack */
 #define DECODE_STACK_SIZE (1024 * 1024)
 
@@ -557,10 +560,10 @@ AVFrame *video_take_due_frame(int64_t clock_us) {
     AVFrame *frame = NULL;
     pthread_mutex_lock(&state_mutex);
     if (fifo_count > 0 && clock_us != AV_NOPTS_VALUE) {
-        /* skip frames whose successor is already due: the screen fell behind */
+        /* skip frames whose successor is already late: the screen fell behind */
         while (fifo_count >= 2) {
             AVFrame *next = fifo[(fifo_head + 1) % FRAME_FIFO_MAX];
-            if (next->pts == AV_NOPTS_VALUE || next->pts > clock_us) break;
+            if (next->pts == AV_NOPTS_VALUE || next->pts > clock_us - SKIP_LATE_US) break;
             av_frame_free(&fifo[fifo_head]);
             fifo_head = (fifo_head + 1) % FRAME_FIFO_MAX;
             fifo_count--;

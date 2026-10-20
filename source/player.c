@@ -41,6 +41,10 @@
 #define VIDEO_MAX_PACKETS 400
 /* show video on a wall clock if no audio has arrived after this long */
 #define AUDIO_CLOCK_WAIT_US 2000000
+/* the steady video clock closes a gap with the audio clock over about this long... */
+#define STEADY_CLOCK_US 500000
+/* ...and jumps to it when they differ by more than this (an audio stall or queue reset) */
+#define STEADY_RESYNC_US 100000
 #define PLAYER_STACK_SIZE (512 * 1024)
 
 typedef struct {
@@ -95,6 +99,8 @@ static int64_t wall_base_time = 0;
 static int64_t audio_wait_since = 0;
 static int64_t freerun_base = AV_NOPTS_VALUE;
 static int64_t freerun_time = 0;
+static int64_t steady_base = AV_NOPTS_VALUE;
+static int64_t steady_time = 0;
 
 /* ---- requests ---- */
 
@@ -465,8 +471,32 @@ static int interrupt_cb(void *opaque) {
 static void reset_clock_locked(void) {
     wall_base_pts = AV_NOPTS_VALUE;
     freerun_base = AV_NOPTS_VALUE;
+    steady_base = AV_NOPTS_VALUE;
     audio_wait_since = 0;
     use_audio_clock = has_audio;
+}
+
+/* SDL takes queued audio one device buffer at a time (1024 samples, 23 ms), so the audio
+ * clock stands still and then jumps. Timed by it, 60 fps video had two frames come due in
+ * one screen refresh and skipped one of them. Video follows a steady copy instead: it runs
+ * on the system timer and is pulled gently toward the audio clock, or jumps to it when the
+ * two drift far apart. */
+static int64_t steady_clock_locked(int64_t audio, int64_t now) {
+    if (steady_base != AV_NOPTS_VALUE) {
+        int64_t elapsed = now - steady_time;
+        int64_t clock = steady_base + elapsed;
+        int64_t error = audio - clock;
+        if (elapsed >= 0 && error > -STEADY_RESYNC_US && error < STEADY_RESYNC_US) {
+            /* runs at most 20% (resync / smoothing time) fast or slow, so it also follows an
+             * audio device that plays a little off its nominal rate */
+            steady_base = clock + error * (elapsed < STEADY_CLOCK_US ? elapsed : STEADY_CLOCK_US) / STEADY_CLOCK_US;
+            steady_time = now;
+            return steady_base;
+        }
+    }
+    steady_base = audio;
+    steady_time = now;
+    return audio;
 }
 
 static int64_t running_clock_locked(void) {
@@ -478,12 +508,12 @@ static int64_t running_clock_locked(void) {
             if (eof && audio_queued_ms() == 0) {
                 /* the audio track ended before the video: let time keep running */
                 if (freerun_base == AV_NOPTS_VALUE) {
-                    freerun_base = a;
+                    freerun_base = steady_base != AV_NOPTS_VALUE ? steady_base + (now - steady_time) : a;
                     freerun_time = now;
                 }
                 return freerun_base + (now - freerun_time);
             }
-            return a;
+            return steady_clock_locked(a, now);
         }
         if (video_next_frame_pts() == AV_NOPTS_VALUE) return AV_NOPTS_VALUE;
         if (!audio_wait_since) audio_wait_since = now;
@@ -889,6 +919,8 @@ void player_set_paused(bool p) {
                 /* continue the wall clock (if used) from where it stopped */
                 wall_base_pts = paused_at;
                 wall_base_time = now;
+                /* the steady clock picks the audio clock up again where it resumes */
+                steady_base = AV_NOPTS_VALUE;
                 if (freerun_base != AV_NOPTS_VALUE) {
                     freerun_base = paused_at;
                     freerun_time = now;

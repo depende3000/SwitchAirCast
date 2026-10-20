@@ -50,6 +50,8 @@ int main(int argc, char **argv) {
     int safari_step = 0;
     double playing_at = -1;
     unsigned long shown_at_script_end = 0;
+    /* one iteration per 60 Hz refresh, on a fixed schedule like a vsync-locked screen */
+    double next_refresh = start;
     for (;;) {
         double t = now_s() - start;
         if (safari) {
@@ -111,13 +113,15 @@ int main(int argc, char **argv) {
         }
         player_status_t st;
         player_get_status(&st);
+        video_stats_t vs;
+        video_get_stats(&vs);
         if (t >= next_print) {
             next_print = t + 0.5;
             printf("t=%5.2f state=%d pos=%6.2f dur=%5.1f paused=%d buf=%d clock=%7.2f frame=%7.2f shown=%lu "
-                   "audio_q=%4d ms vpkts=%3d vframes=%d\n",
+                   "skipped=%lu audio_q=%4d ms vpkts=%3d vframes=%d\n",
                    t, st.state, st.position, st.duration, st.paused, st.buffering,
                    clock == AV_NOPTS_VALUE ? -1.0 : clock / 1e6, last_pts == AV_NOPTS_VALUE ? -1.0 : last_pts / 1e6,
-                   shown, audio_queued_ms(), video_queued_packets(), video_queued_frames());
+                   shown, vs.dropped, audio_queued_ms(), video_queued_packets(), video_queued_frames());
             fflush(stdout);
         }
         if (st.state == PLAYER_ENDED) {
@@ -126,7 +130,13 @@ int main(int argc, char **argv) {
             break;
         }
         if (t > 120) break;
-        usleep(16666);
+        next_refresh += 1.0 / 60.0;
+        double wait = next_refresh - now_s();
+        if (wait > 0) {
+            usleep((useconds_t) (wait * 1e6));
+        } else if (wait < -0.1) {
+            next_refresh = now_s();
+        }
     }
     player_stop();
     audio_shutdown();
