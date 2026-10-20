@@ -332,6 +332,7 @@ typedef struct {
     unsigned long frames, dropped;               /* since the last log line */
     unsigned long total_frames, total_dropped;   /* since mirroring/video began */
     unsigned long started_ms, interval_ms;
+    unsigned long last_loop_ms, missed_vsyncs;   /* refreshes the frame loop was too slow for */
 } stats_log_t;
 
 static double percent(unsigned long part, unsigned long whole) {
@@ -365,6 +366,12 @@ static void track_video_stats(stats_log_t *s, const ui_model_t *m, const int ask
     s->dropped += dd;
     s->total_frames += df;
     s->total_dropped += dd;
+    if (s->last_loop_ms) {
+        /* the loop waits for each 60 Hz vsync: an iteration of n refreshes missed n - 1 */
+        unsigned long refreshes = ((now - s->last_loop_ms) * 60 + 500) / 1000;
+        if (refreshes > 1) s->missed_vsyncs += refreshes - 1;
+    }
+    s->last_loop_ms = now;
 
     if (!active) {
         double secs = (double) (now - s->started_ms) / 1000.0;
@@ -377,11 +384,11 @@ static void track_video_stats(stats_log_t *s, const ui_model_t *m, const int ask
     if (now - s->interval_ms >= STATS_LOG_MS) {
         double secs = (double) (now - s->interval_ms) / 1000.0;
         platform_log("stats: %dx%d %s %s, %.1f fps decoded, %.1f fps shown, %lu of %lu skipped (%.1f%%), "
-                     "%.1f ms/frame",
+                     "%.1f ms/frame, %lu vsyncs missed",
                      v->width, v->height, v->codec ? v->codec : "-", v->hw ? "hw" : "sw",
                      (double) s->frames / secs, (double) (s->frames - s->dropped) / secs, s->dropped, s->frames,
-                     percent(s->dropped, s->frames), v->decode_ms);
-        s->frames = s->dropped = 0;
+                     percent(s->dropped, s->frames), v->decode_ms, s->missed_vsyncs);
+        s->frames = s->dropped = s->missed_vsyncs = 0;
         s->interval_ms = now;
     }
 }

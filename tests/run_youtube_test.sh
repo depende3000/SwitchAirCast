@@ -4,7 +4,8 @@
 #
 # Usage: tests/run_youtube_test.sh <hls-dir> [work-dir]
 #   <hls-dir> holds master.m3u8 (URIs starting with mlhls://localhost/) and the media
-#   playlists/segments it refers to. Build first: make -f Makefile.linux all tests
+#   playlists/segments it refers to (tests/make_hls_fixture.sh makes one).
+#   Build first: make -f Makefile.linux all tests
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HLS="$(cd "$1" && pwd)"
