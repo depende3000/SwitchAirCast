@@ -27,7 +27,7 @@ ROMFS		:=
 
 APP_TITLE	:=	SwitchAirCast
 APP_AUTHOR	:=	depende3000
-APP_VERSION	:=	1.1.0
+APP_VERSION	:=	1.1.1
 ICON		:=	icon.jpg
 
 #---------------------------------------------------------------------------------

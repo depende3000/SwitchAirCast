@@ -31,10 +31,62 @@
 #include <sys/random.h>
 #endif
 
+/* Log lines are collected in memory and a background thread writes them a few times a
+ * second. Writing and flushing every line to the SD card took several milliseconds, and
+ * with debug_log the AirPlay threads spent most of their time waiting for it: YouTube
+ * videos timed out while their playlists were read and mirroring connections failed.
+ * A crash can lose the last LOG_WRITE_MS of the log. */
+#define LOG_BUFFER_SIZE (256 * 1024)
+#define LOG_WRITE_MS 200
+
+/* log_mutex guards the buffers and the writer state; file_mutex guards the files and
+ * is held while writing. Lock order: file_mutex, then log_mutex. */
 static pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
+static char log_bufs[2][LOG_BUFFER_SIZE];
+static int log_active = 0;                 /* the buffer platform_log appends to */
+static size_t log_len = 0;
+static unsigned long log_dropped = 0;      /* lines that did not fit before the next write */
+static bool log_writer_running = false;
+static volatile bool log_writer_stop = false;
+static pthread_t log_writer;
 static FILE *log_file = NULL;
 static FILE *history_file = NULL;   /* logs/log-<date>_<time>.txt, debug logging only */
 static char data_dir[512];
+
+/* Writes the lines collected so far to stdout and the log files; file_mutex must be held. */
+static void write_pending_locked(void) {
+    pthread_mutex_lock(&log_mutex);
+    const char *buf = log_bufs[log_active];
+    size_t len = log_len;
+    unsigned long dropped = log_dropped;
+    log_active = 1 - log_active;
+    log_len = 0;
+    log_dropped = 0;
+    pthread_mutex_unlock(&log_mutex);
+    if (len == 0 && dropped == 0) return;
+
+    char note[96];
+    int note_len = dropped ? snprintf(note, sizeof(note), "[log] %lu lines dropped (the log fell behind)\n", dropped) : 0;
+    FILE *outs[] = { stdout, log_file, history_file };
+    for (size_t i = 0; i < sizeof(outs) / sizeof(outs[0]); i++) {
+        if (!outs[i]) continue;
+        fwrite(buf, 1, len, outs[i]);
+        if (note_len > 0) fwrite(note, 1, (size_t) note_len, outs[i]);
+        fflush(outs[i]);
+    }
+}
+
+static void *log_writer_thread(void *arg) {
+    (void) arg;
+    while (!log_writer_stop) {
+        usleep(LOG_WRITE_MS * 1000);
+        pthread_mutex_lock(&file_mutex);
+        write_pending_locked();
+        pthread_mutex_unlock(&file_mutex);
+    }
+    return NULL;
+}
 
 /* Keeps the previous run's log (log-previous.txt) so a crash can still be diagnosed
  * after SwitchAirCast is started again. */
@@ -44,15 +96,32 @@ static void open_log(void) {
     snprintf(prev, sizeof(prev), "%s/log-previous.txt", data_dir);
     remove(prev);
     rename(path, prev);
+    pthread_mutex_lock(&file_mutex);
     log_file = fopen(path, "w");
+    pthread_mutex_unlock(&file_mutex);
+    log_writer_stop = false;
+    bool running = pthread_create(&log_writer, NULL, log_writer_thread, NULL) == 0;
+    pthread_mutex_lock(&log_mutex);
+    log_writer_running = running;
+    pthread_mutex_unlock(&log_mutex);
 }
 
+/* Stops the writer and writes what is left; later lines are written as they come. */
 static void close_logs(void) {
     pthread_mutex_lock(&log_mutex);
+    bool running = log_writer_running;
+    log_writer_running = false;
+    pthread_mutex_unlock(&log_mutex);
+    if (running) {
+        log_writer_stop = true;
+        pthread_join(log_writer, NULL);
+    }
+    pthread_mutex_lock(&file_mutex);
+    write_pending_locked();
     if (log_file) fclose(log_file);
     if (history_file) fclose(history_file);
     log_file = history_file = NULL;
-    pthread_mutex_unlock(&log_mutex);
+    pthread_mutex_unlock(&file_mutex);
 }
 
 static void copy_file(const char *from, const char *to) {
@@ -537,11 +606,11 @@ void platform_keep_log_history(int keep) {
     prune_log_history(dir, keep - 1);
 
     /* start with what this run logged before the settings were read */
-    pthread_mutex_lock(&log_mutex);
-    if (log_file) fflush(log_file);
+    pthread_mutex_lock(&file_mutex);
+    write_pending_locked();
     copy_file(log_path, path);
     history_file = fopen(path, "a");
-    pthread_mutex_unlock(&log_mutex);
+    pthread_mutex_unlock(&file_mutex);
     platform_log("log: also writing %s (the newest %d are kept)", path, keep);
 }
 
@@ -554,17 +623,28 @@ void platform_log(const char *fmt, ...) {
 
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
+    char out[1100];
+    int n = snprintf(out, sizeof(out), "[%5ld.%03ld] %s\n", (long) ts.tv_sec, ts.tv_nsec / 1000000L, line);
+    if (n < 0) return;
+    if ((size_t) n >= sizeof(out)) {
+        n = (int) sizeof(out) - 1;
+        out[n - 1] = '\n';
+    }
 
     pthread_mutex_lock(&log_mutex);
-    printf("[%5ld.%03ld] %s\n", (long) ts.tv_sec, ts.tv_nsec / 1000000L, line);
-    fflush(stdout);
-    if (log_file) {
-        fprintf(log_file, "[%5ld.%03ld] %s\n", (long) ts.tv_sec, ts.tv_nsec / 1000000L, line);
-        fflush(log_file);
+    if (log_len + (size_t) n <= LOG_BUFFER_SIZE) {
+        memcpy(log_bufs[log_active] + log_len, out, (size_t) n);
+        log_len += (size_t) n;
+    } else {
+        log_dropped++;
     }
-    if (history_file) {
-        fprintf(history_file, "[%5ld.%03ld] %s\n", (long) ts.tv_sec, ts.tv_nsec / 1000000L, line);
-        fflush(history_file);
-    }
+    bool running = log_writer_running;
     pthread_mutex_unlock(&log_mutex);
+
+    /* before the writer starts and after it stops, write at once */
+    if (!running) {
+        pthread_mutex_lock(&file_mutex);
+        write_pending_locked();
+        pthread_mutex_unlock(&file_mutex);
+    }
 }
