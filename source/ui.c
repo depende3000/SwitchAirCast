@@ -547,7 +547,7 @@ static void draw_stats(const ui_model_t *m) {
     } else {
         snprintf(shown, sizeof(shown), "%.1f%%", v->shown_percent);
     }
-    snprintf(lines[2], TEXT_MAX, tr(S_FRAMES_SHOWN), v->frames, shown);
+    snprintf(lines[2], TEXT_MAX, tr(S_FRAMES_SHOWN), shown);
     snprintf(lines[3], TEXT_MAX, "%s  \xC2\xB7  %s", m->ip, m->rx.audio_playing ? tr(S_AUDIO_ON) : tr(S_AUDIO_OFF));
     float w = 0;
     for (int i = 0; i < 4; i++) {

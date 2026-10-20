@@ -20,11 +20,11 @@
 static const char *const language_names[] = { "auto", "en", "es" };
 static const char *const theme_names[] = { "auto", "dark", "black" };
 static const char *const rotation_names[] = { "off", "auto", "left", "right" };
-static const char *const resolution_names[] = { "auto", "1080p", "720p", "custom" };
+static const char *const resolution_names[] = { "1080p", "720p", "custom" };
 
 void config_defaults(config_t *cfg) {
     memset(cfg, 0, sizeof(*cfg));
-    cfg->resolution = RESOLUTION_AUTO;
+    cfg->resolution = RESOLUTION_1080P;
     cfg->width = 1920;
     cfg->height = 1080;
     cfg->max_fps = 60;
@@ -40,10 +40,8 @@ void config_defaults(config_t *cfg) {
     cfg->rotation = ROTATION_OFF;
 }
 
-void config_video_size(const config_t *cfg, bool handheld, int *width, int *height) {
-    resolution_mode_t r = cfg->resolution;
-    if (r == RESOLUTION_AUTO) r = handheld ? RESOLUTION_720P : RESOLUTION_1080P;
-    switch (r) {
+void config_video_size(const config_t *cfg, int *width, int *height) {
+    switch (cfg->resolution) {
     case RESOLUTION_720P: *width = 1280; *height = 720; break;
     case RESOLUTION_CUSTOM: *width = cfg->width; *height = cfg->height; break;
     default: *width = 1920; *height = 1080; break;
@@ -103,8 +101,11 @@ void config_load(config_t *cfg, const char *path) {
             }
             cfg->name[n] = '\0';
         } else if (!strcasecmp(key, "resolution")) {
-            cfg->resolution =
-                (resolution_mode_t) parse_name(val, resolution_names, COUNT(resolution_names), cfg->resolution);
+            /* "auto" (720p handheld, 1080p docked) from 1.1.0/1.1.1 becomes 1080p */
+            cfg->resolution = !strcasecmp(val, "auto") ? RESOLUTION_1080P
+                                                       : (resolution_mode_t) parse_name(val, resolution_names,
+                                                                                        COUNT(resolution_names),
+                                                                                        cfg->resolution);
             saw_resolution = true;
         } else if (!strcasecmp(key, "width")) {
             cfg->width = parse_int(val, cfg->width, 320, 3840);
@@ -139,8 +140,7 @@ void config_load(config_t *cfg, const char *path) {
         }
     }
     fclose(f);
-    /* files from before the resolution setting: 1920x1080 was the default and becomes
-     * auto; a size the user picked is kept */
+    /* files from before the resolution setting (1.0.0): a size the user picked is kept */
     if (!saw_resolution) {
         if (cfg->width == 1280 && cfg->height == 720) cfg->resolution = RESOLUTION_720P;
         else if (cfg->width != 1920 || cfg->height != 1080) cfg->resolution = RESOLUTION_CUSTOM;
@@ -170,9 +170,8 @@ bool config_save(const config_t *cfg, const char *path) {
             "# off, auto (motion sensor, handheld only), left or right.\n"
             "vertical_mode = %s\n"
             "\n"
-            "# Picture size requested from the iPhone/iPad/Mac: auto (1280x720 handheld,\n"
-            "# 1920x1080 docked), 1080p, 720p, or custom (uses width and height below).\n"
-            "# 720p is lighter on Wi-Fi; 1080p looks best on a TV.\n"
+            "# Picture size requested from the iPhone/iPad/Mac: 1080p, 720p (lighter on a\n"
+            "# weak Wi-Fi), or custom (uses width and height below).\n"
             "resolution = %s\n"
             "width = %d\n"
             "height = %d\n"

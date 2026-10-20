@@ -17,8 +17,7 @@
 ## What it can do
 
 - **Screen mirroring** from iPhone, iPad and Mac, up to 1080p at 60 fps, decoded by the Switch's
-  hardware video decoder. The resolution follows the console (720p handheld, 1080p on the TV)
-  or can be fixed in the Settings menu, together with the frame rate.
+  hardware video decoder. On a weak Wi-Fi, switch to 720p or 30 fps in the Settings menu.
 - **Send videos instead of mirroring.** Tap the AirPlay button in the YouTube app (iPhone/iPad)
   or in Safari on a Mac and the Switch plays the video by itself. Your device becomes the remote,
   so you can lock it or use other apps meanwhile.
@@ -86,9 +85,7 @@ The Switch does not dim or go to sleep while SwitchAirCast is open.
 
 The Settings menu (**−**) changes the most common options and saves them right away; the line
 under the list explains the selected one. Resolution and frame rate apply the next time a device
-connects (press **B** to disconnect, then choose the Switch again). With **Automatic**
-resolution the size follows the console: 1280 × 720 in handheld mode and 1920 × 1080 on the TV,
-switching at the next connection after you dock or undock.
+connects (press **B** to disconnect, then choose the Switch again).
 
 All options live in `/config/SwitchAirCast/config.ini` on the SD card; you can edit that file on
 a computer (changes there apply the next time you start the app).
@@ -100,7 +97,7 @@ a computer (changes there apply the next time you start the app).
 | `theme` | `auto` | `auto` (black on the OLED model), `dark` or `black` |
 | `screen_off_minutes` | `5` | Turn the screen off after this many minutes of waiting or music (`0` = never) |
 | `vertical_mode` | `off` | `off`, `auto` (motion sensor, handheld only), `left` or `right` |
-| `resolution` | `auto` | Picture size asked from your device: `auto` (1280 × 720 handheld, 1920 × 1080 docked), `1080p`, `720p`, or `custom` (uses `width` and `height`). Also in the Settings menu |
+| `resolution` | `1080p` | Picture size asked from your device: `1080p`, `720p` (lighter on a weak Wi-Fi), or `custom` (uses `width` and `height`). Also in the Settings menu |
 | `width`, `height` | `1920`, `1080` | Picture size used with `resolution = custom` |
 | `max_fps` | `60` | Frame rate asked from your device (`60` or `30` in the Settings menu) |
 | `audio` | `true` | Play sound on the Switch |

@@ -65,7 +65,7 @@ typedef enum {
     S_HARDWARE,
     S_SOFTWARE,
     S_MS_PER_FRAME,           /* %.1f */
-    S_FRAMES_SHOWN,           /* %lu %s */
+    S_FRAMES_SHOWN,           /* %s */
     S_AUDIO_ON,
     S_AUDIO_OFF,
     S_SET_LANGUAGE,
@@ -85,7 +85,6 @@ typedef enum {
     S_VAL_ROTATION_AUTO,
     S_VAL_ROTATE_LEFT,
     S_VAL_ROTATE_RIGHT,
-    S_VAL_RESOLUTION_AUTO,    /* %d %d */
     S_CHANGE,
     S_CLOSE,
     S_SETTINGS_NOTE,

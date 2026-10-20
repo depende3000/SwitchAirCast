@@ -258,12 +258,8 @@ static void fill_settings(ui_model_t *m, const config_t *cfg) {
     }
     snprintf(m->settings_values[3], sizeof(m->settings_values[3]), "%s", tr(rotation_values[cfg->rotation]));
     int w, h;
-    config_video_size(cfg, platform_is_handheld(), &w, &h);
-    if (cfg->resolution == RESOLUTION_AUTO) {
-        snprintf(m->settings_values[4], sizeof(m->settings_values[4]), tr(S_VAL_RESOLUTION_AUTO), w, h);
-    } else {
-        snprintf(m->settings_values[4], sizeof(m->settings_values[4]), "%d \xC3\x97 %d", w, h);
-    }
+    config_video_size(cfg, &w, &h);
+    snprintf(m->settings_values[4], sizeof(m->settings_values[4]), "%d \xC3\x97 %d", w, h);
     snprintf(m->settings_values[5], sizeof(m->settings_values[5]), "%d fps", cfg->max_fps);
     static const str_id_t notes[UI_SETTINGS_ITEMS] = { S_SETTINGS_NOTE_LANGUAGE, S_SETTINGS_NOTE_THEME,
                                                        S_SETTINGS_NOTE, S_SETTINGS_NOTE_ROTATION,
@@ -293,11 +289,11 @@ static void change_setting(config_t *cfg, int item, int dir) {
         cfg->rotation = (rotation_mode_t) ((cfg->rotation + 4 + dir) % 4);
         break;
     case 4:
-        /* automatic, 1080p, 720p; a custom size from config.ini steps to automatic */
+        /* 1080p or 720p; a custom size from config.ini steps to 1080p */
         if (cfg->resolution == RESOLUTION_CUSTOM) {
-            cfg->resolution = RESOLUTION_AUTO;
+            cfg->resolution = RESOLUTION_1080P;
         } else {
-            cfg->resolution = (resolution_mode_t) ((cfg->resolution + 3 + dir) % 3);
+            cfg->resolution = cfg->resolution == RESOLUTION_1080P ? RESOLUTION_720P : RESOLUTION_1080P;
         }
         break;
     case 5: {
@@ -640,9 +636,8 @@ int main(int argc, char **argv) {
             if (!strcmp(ip, "-")) {
                 model.screen = UI_SCREEN_NO_NETWORK;
             } else if (now >= next_start_try || retry) {
-                /* the size follows the console's mode when the setting is automatic */
                 config_t rx_cfg = cfg;
-                config_video_size(&cfg, platform_is_handheld(), &rx_cfg.width, &rx_cfg.height);
+                config_video_size(&cfg, &rx_cfg.width, &rx_cfg.height);
                 if (receiver_start(&rx_cfg, name, error, sizeof(error))) {
                     started = true;
                     asked[0] = rx_cfg.width;
@@ -661,9 +656,9 @@ int main(int argc, char **argv) {
             receiver_get_status(&model.rx);
             video_get_stats(&model.video);
             update_coverart(&model.rx);
-            /* a setting changed or the console was docked/undocked: the next device gets it */
+            /* the resolution or frame rate changed in the settings: the next device gets it */
             int w, h;
-            config_video_size(&cfg, platform_is_handheld(), &w, &h);
+            config_video_size(&cfg, &w, &h);
             if (w != asked[0] || h != asked[1] || cfg.max_fps != asked[2]) {
                 receiver_set_video_size(w, h, cfg.max_fps);
                 asked[0] = w;

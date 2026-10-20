@@ -161,7 +161,7 @@ int main(int argc, char **argv) {
     snprintf(m.settings_values[1], 64, "%s", tr(S_VAL_THEME_BLACK));
     snprintf(m.settings_values[2], 64, tr(S_VAL_MINUTES), 5);
     snprintf(m.settings_values[3], 64, "%s", tr(S_VAL_ROTATION_AUTO));
-    snprintf(m.settings_values[4], 64, tr(S_VAL_RESOLUTION_AUTO), 1280, 720);
+    snprintf(m.settings_values[4], 64, "1920 \xC3\x97 1080");
     snprintf(m.settings_values[5], 64, "60 fps");
     /* every row selected with its note (the same notes as main.c's settings menu) */
     static const str_id_t notes[UI_SETTINGS_ITEMS] = { S_SETTINGS_NOTE_LANGUAGE, S_SETTINGS_NOTE_THEME,
@@ -179,7 +179,7 @@ int main(int argc, char **argv) {
     snprintf(m.settings_values[1], 64, "%s", tr(S_VAL_THEME_DARK));
     snprintf(m.settings_values[2], 64, "%s", tr(S_VAL_NEVER));
     snprintf(m.settings_values[3], 64, "%s", tr(S_VAL_ROTATE_RIGHT));
-    snprintf(m.settings_values[4], 64, tr(S_VAL_RESOLUTION_AUTO), 1920, 1080);
+    snprintf(m.settings_values[4], 64, "1280 \xC3\x97 720");
     snprintf(m.settings_values[5], 64, "30 fps");
     m.settings_index = 3;
     m.settings_note = tr(notes[3]);

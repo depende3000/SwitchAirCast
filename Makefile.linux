@@ -24,7 +24,7 @@ PKGS     := sdl2 libavformat libavcodec libswresample libswscale libavutil freet
 CFLAGS   := -O2 -g -Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-but-set-variable \
             -Wno-parentheses -Wno-format-truncation -MMD -MP \
             -D_GNU_SOURCE -DHAVE_STRNDUP -DHAVE_MEMMEM -DHAVE_GMTIME_R -DHAVE_LOCALTIME_R \
-            -DPACKAGE_VERSION=\"2.8.0\" -DPLIST_210 -DPLIST_230 -DSWITCHCAST_VERSION=\"1.1.1\" \
+            -DPACKAGE_VERSION=\"2.8.0\" -DPLIST_210 -DPLIST_230 -DSWITCHCAST_VERSION=\"1.1.2\" \
             $(addprefix -I,$(INCDIRS)) -I$(PREFIX)/include -I$(PREFIX)/include/SDL2 \
             $(shell pkg-config --cflags $(PKGS))
 LDLIBS   := $(PREFIX)/lib/libSDL2_ttf.a $(PREFIX)/lib/libmbedcrypto.a $(PREFIX)/lib/libsodium.a \
