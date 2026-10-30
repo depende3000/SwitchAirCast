@@ -44,33 +44,13 @@ These files build everywhere, and a guard changes what they do on the Switch.
 libplist's `lib/plist/src/time64.c` supplies its own versions when they are missing. Each Makefile sets
 `SWITCHCAST_VERSION` on its own (`APP_VERSION` in `Makefile`, a literal in `Makefile.linux`).
 
-### DLNA renderer
-
-`source/dlna.c` and `source/dlna.h` contain no `__SWITCH__` guard, and `Makefile` and
-`Makefile.linux` both compile them. `source/receiver.c` starts the renderer when `dlna` is on in
-`config.ini` (on by default), and `source/main.c` does not start the receiver in applet mode, so
-the renderer does not run there either. The control points it serves are Android apps and Windows
-(`tests/dlna_client.py` plays that role in tests). What differs between platforms comes from other
-files:
-
-| | Switch | Desktop |
-| --- | --- | --- |
-| IP address it announces (`platform_get_ip`) | `nifmGetCurrentIpAddress` | address of the interface that routes to `224.0.0.251:5353` |
-| Random bytes for subscription ids (`platform_random`) | `randomGet` | `getrandom` |
-| Playing the media (`source/player.c`, `source/video.c`) | NVDEC when `hw_decode` is on, software otherwise | software |
-| Socket setup | libnx sockets from `platform_init` | the system's |
-
-If the SSDP multicast group cannot be joined (`source/dlna.c`, `open_ssdp_socket`), it logs that
-and keeps announcing on both platforms. The `#ifdef`s inside `dlna.c` (`MSG_NOSIGNAL`,
-`SO_NOSIGPIPE`, `SO_REUSEPORT`) check for socket options, not for the Switch.
-
 ## Portable
 
 No Switch dependency; also runs in the desktop build. Nothing in these files includes `switch.h`
 or calls libnx; whatever they need from the console they get through `source/platform.h`.
 
 - `source/audio.c`, `source/config.c`, `source/i18n.c`, `source/player.c`, `source/receiver.c`,
-  `source/ui.c`, `source/dlna.c` (with the notes above).
+  `source/ui.c` (with the notes above).
 - `lib/plist/` (libplist and libcnary).
 - `lib/airplay/`, except for the guarded places listed above. This includes `srp.c` (mbedtls
   bignums), `playfair/`, `llhttp/`, the HTTP and RTSP handlers, the mirroring and audio RTP code,

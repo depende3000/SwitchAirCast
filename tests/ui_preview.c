@@ -70,7 +70,6 @@ int main(int argc, char **argv) {
     m.name = "Alex\xE2\x80\x99s Switch";
     m.ip = "192.168.1.42";
     m.port = 7000;
-    m.dlna = true;
     m.now_ms = 123456;
 
     m.screen = UI_SCREEN_STARTING;
@@ -86,9 +85,6 @@ int main(int argc, char **argv) {
     m.screen = UI_SCREEN_READY;
     m.rx.state = RECEIVER_WAITING;
     frame(&m, dir, "4_ready", w, h);
-    m.dlna = false;
-    frame(&m, dir, "4b_ready_no_dlna", w, h);
-    m.dlna = true;
 
     m.rx.state = RECEIVER_CONNECTED;
     strcpy(m.rx.client_name, "Alex\xE2\x80\x99s iPhone");
@@ -140,7 +136,6 @@ int main(int argc, char **argv) {
     m.video_w = 1920;
     m.video_h = 1080;
     m.player.state = PLAYER_PLAYING;
-    m.player.has_video = true;
     m.player.paused = true;
     m.player.position = 754;
     m.player.duration = 1265;
@@ -149,24 +144,6 @@ int main(int argc, char **argv) {
     m.player.state = PLAYER_ENDED;
     m.player.failed = true;
     frame(&m, dir, "13_video_failed", w, h);
-
-    /* music sent over DLNA: no picture, the now-playing screen with the player's controls */
-    m.player.failed = false;
-    m.player.state = PLAYER_PLAYING;
-    m.player.has_video = false;
-    m.player.paused = true;
-    m.player.position = 83;
-    m.player.duration = 225;
-    m.video_tex = NULL;
-    m.mirror_started_ms = 0;
-    strcpy(m.rx.client_name, "BubbleUPnP");
-    m.rx.has_progress = true;
-    m.rx.position = 83;
-    m.rx.duration = 225;
-    m.coverart_tex = gradient_texture(600, 600, 200);
-    frame(&m, dir, "13b_dlna_music_paused", w, h);
-    m.coverart_tex = NULL;
-    m.rx.client_name[0] = '\0';
 
     /* settings menu over the ready screen */
     m.rx.state = RECEIVER_WAITING;
@@ -225,7 +202,6 @@ int main(int argc, char **argv) {
     m.rotation = 270;
     m.mirror_started_ms = 0;
     m.player.state = PLAYER_PLAYING;
-    m.player.has_video = true;
     m.player.failed = false;
     m.player.paused = true;
     m.player.position = 42;

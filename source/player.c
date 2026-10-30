@@ -93,8 +93,6 @@ static double last_position = 0.0;
 static bool eof = false;
 static bool use_audio_clock = false;
 static bool has_audio = false;
-static bool has_video = false;
-static bool completed = false;
 static int64_t paused_at = AV_NOPTS_VALUE;
 static int64_t wall_base_pts = AV_NOPTS_VALUE;
 static int64_t wall_base_time = 0;
@@ -555,11 +553,10 @@ static int pick_video_stream(AVFormatContext *fmt, int max_height) {
     return best;
 }
 
-static void finish(bool with_error, bool at_end) {
+static void finish(bool with_error) {
     pthread_mutex_lock(&mutex);
     state = PLAYER_ENDED;
     failed = with_error;
-    completed = at_end;
     pthread_mutex_unlock(&mutex);
 }
 
@@ -707,7 +704,6 @@ static void *player_thread(void *arg) {
     int vsession = -1, asession = -1;
     int64_t start_us = 0;
     bool error = true;
-    bool at_end = false;
     char err[128];
     int ret;
     /* HLS from the phone is in memory: seek by reopening from trimmed playlists */
@@ -732,7 +728,6 @@ static void *player_thread(void *arg) {
     pthread_mutex_lock(&mutex);
     duration = in.fmt->duration > 0 ? (double) in.fmt->duration / AV_TIME_BASE : 0.0;
     has_audio = asession >= 0;
-    has_video = vsession >= 0;
     reset_clock_locked();
     state = PLAYER_PLAYING;
     if (paused) {
@@ -788,7 +783,6 @@ static void *player_thread(void *arg) {
             if (video_done && audio_done) {
                 platform_log("player: reached the end");
                 error = false;
-                at_end = true;
                 goto done;
             }
             usleep(20000);
@@ -836,7 +830,7 @@ done:
     close_input(&in);
     free(remote_master);
     remote_master = NULL;
-    finish(error, at_end);
+    finish(error);
     return NULL;
 }
 
@@ -868,8 +862,6 @@ void player_start(player_request_t *r, const player_options_t *opts) {
     duration = 0.0;
     last_position = r->start;
     has_audio = false;
-    has_video = false;
-    completed = false;
     paused_at = AV_NOPTS_VALUE;
     reset_clock_locked();
     pthread_mutex_unlock(&mutex);
@@ -882,7 +874,7 @@ void player_start(player_request_t *r, const player_options_t *opts) {
     pthread_attr_destroy(&attr);
     if (!thread_started) {
         platform_log("player: could not start the player thread");
-        finish(true, false);
+        finish(true);
     }
 }
 
@@ -911,7 +903,6 @@ void player_reset(void) {
     if (state == PLAYER_ENDED) {
         state = PLAYER_IDLE;
         failed = false;
-        completed = false;
     }
     pthread_mutex_unlock(&mutex);
 }
@@ -974,8 +965,6 @@ void player_get_status(player_status_t *st) {
     pthread_mutex_lock(&mutex);
     st->state = state;
     st->failed = failed;
-    st->completed = state == PLAYER_ENDED && completed;
-    st->has_video = has_video;
     st->paused = paused;
     st->position = seek_requested ? seek_target : last_position;
     st->duration = duration;

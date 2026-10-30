@@ -28,7 +28,6 @@ typedef struct {
     int max_fps;
     bool audio;         /* play AirPlay audio */
     bool video_casting; /* accept AirPlay video (the AirPlay button in YouTube etc.) */
-    bool dlna;          /* DLNA renderer for Android apps, Windows "Cast to Device" etc. */
     char video_language[32]; /* audio track for AirPlay video: "default", "system" or codes like "es:en" */
     bool hw_decode;     /* NVDEC hardware video decoding */
     bool show_stats;    /* start with the statistics overlay visible */
