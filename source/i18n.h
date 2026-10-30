@@ -45,6 +45,7 @@ typedef enum {
     S_IP_ADDRESS,             /* %s */
     S_STEP_WIFI,
     S_STEP_CONTROL_CENTER,
+    S_STEP_DLNA,
     S_STEP_CHOOSE,            /* %s */
     S_PLAYING_FROM,           /* %s */
     S_PLAYING_AUDIO,

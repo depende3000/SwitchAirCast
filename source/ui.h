@@ -31,6 +31,7 @@ typedef enum {
 typedef struct {
     ui_screen_t screen;
     const char *name;            /* advertised AirPlay name */
+    bool dlna;                   /* the DLNA renderer runs (shows how to cast from Android/Windows) */
     const char *ip;
     int port;
     const char *error;           /* UI_SCREEN_ERROR */

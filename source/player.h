@@ -31,6 +31,8 @@ typedef struct {
     double position;      /* seconds */
     double duration;      /* seconds, 0 if unknown (live) */
     double buffered;      /* seconds of audio/video queued ahead of the position */
+    bool has_video;       /* PLAYING: the stream has a picture (false for music) */
+    bool completed;       /* ENDED because the stream played to its end */
 } player_status_t;
 
 /* What to play. Playlists served under local_prefix (the URL prefix UxPlay's HLS

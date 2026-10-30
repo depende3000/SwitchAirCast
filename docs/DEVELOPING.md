@@ -51,6 +51,7 @@ build/linux/fake_sender 127.0.0.1 7000 10 --audio
 | `trim_test` | The HLS master/media playlist rewriting used for variant choice and seeking. |
 | `ui_preview <dir> [w h] [black] [es\|es-419]` | Renders every screen to BMP files (`SDL_VIDEODRIVER=offscreen`); `bmp2png.py` converts them. |
 | `crypto_test` | Deterministic outputs of the crypto layer, to diff against UxPlay's OpenSSL implementation. |
+| `dlna_test` + `dlna_client.py` | `python3 tests/dlna_client.py build/linux/dlna_test` runs the DLNA renderer with a simulated player and acts as a control point: SSDP search and announcements, descriptions, every AVTransport / RenderingControl / ConnectionManager action used by BubbleUPnP and Windows, error codes, GENA subscriptions and LastChange events, queued next track, cover art. `dlna_client.py --url http://IP:49152/description.xml --play <media-url>` checks a running receiver (desktop or console) playing a real file. |
 | `make_icon` | Regenerates `icon.jpg`. |
 
 ## How it is put together
@@ -58,7 +59,8 @@ build/linux/fake_sender 127.0.0.1 7000 10 --audio
 | Path | Contents |
 | --- | --- |
 | `source/main.c` | SDL setup, input, frame loop, video texture upload |
-| `source/receiver.c` | UxPlay callbacks, connection resets, client watchdog, pairing code |
+| `source/receiver.c` | UxPlay callbacks, connection resets, client watchdog, pairing code; owns the player for AirPlay and DLNA |
+| `source/dlna.c` | DLNA / UPnP media renderer: SSDP, device and service descriptions, SOAP control, GENA events, all on one thread |
 | `source/video.c` | FFmpeg decoding on its own thread (NVDEC on Switch, software fallback); short frame queue for mirroring (one frame per screen refresh), timed frame queue for playback |
 | `source/player.c` | AirPlay video player: HLS from in-memory or remote playlists, segment download, A/V sync, seeking |
 | `source/audio.c` | AAC-ELD/AAC/ALAC/PCM decoding, resampling, SDL audio queue |
@@ -70,6 +72,8 @@ build/linux/fake_sender 127.0.0.1 7000 10 --audio
 | `lib/plist/` | libplist (binary/XML property lists) |
 
 ### Changes to UxPlay's library
+
+Which of these depend on the Switch, and what else is Switch-only: [SWITCH_ONLY.md](SWITCH_ONLY.md).
 
 - `crypto.c` is rewritten on mbedtls and libsodium (UxPlay uses OpenSSL, which devkitPro does
   not ship). Its output matches the OpenSSL version byte for byte (`tests/crypto_test.c`).
@@ -104,6 +108,23 @@ build/linux/fake_sender 127.0.0.1 7000 10 --audio
   layer and trip an assertion.
 - Seeking in the YouTube app's streams reopens them from playlists trimmed to the target segment,
   because FFmpeg's own HLS seek ends the stream when segments are fragmented MP4.
+
+### DLNA renderer notes
+
+- Google Cast (Chromecast) is not implemented on purpose: Android, Chrome and Google's apps check
+  that a receiver holds a device certificate signed by Google before they connect, so a homebrew
+  receiver can't pass. DLNA is what Android apps and Windows can use without that.
+- The renderer is a UPnP MediaRenderer:1 (DMR-1.50) on TCP port 49152 (a free port if taken) and
+  SSDP on 1900. The UUID comes from `device_id`, so control points keep recognising the console.
+- Like the mDNS responder, it re-announces itself every 30 s, because the console may not be
+  able to join the multicast group and then never hears searches.
+- The player belongs to whoever started it last. A DLNA cast replaces AirPlay mirroring or video
+  (the iPhone is disconnected); AirPlay sessions ending do not stop media that DLNA started, and
+  AirPlay mirroring or video replaces DLNA media (the control point sees `STOPPED`).
+- Music without a picture shows the now-playing screen, with metadata from the DIDL-Lite sent
+  with the URL and cover art fetched over plain HTTP from `albumArtURI`.
+- `SetNextAVTransportURI` is supported: the next item starts when the current one ends, which
+  is how BubbleUPnP and others play gapless playlists.
 
 ## Logs and crash reports
 
