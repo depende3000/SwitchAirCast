@@ -73,6 +73,8 @@ build/linux/fake_sender 127.0.0.1 7000 10 --audio
 
 ### Changes to UxPlay's library
 
+Which of these depend on the Switch, and what else is Switch-only: [SWITCH_ONLY.md](SWITCH_ONLY.md).
+
 - `crypto.c` is rewritten on mbedtls and libsodium (UxPlay uses OpenSSL, which devkitPro does
   not ship). Its output matches the OpenSSL version byte for byte (`tests/crypto_test.c`).
 - `srp.c` is a new SRP-6a verifier on mbedtls bignums (Apple's variant: SHA-1, the RFC 5054
