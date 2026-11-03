@@ -2,3 +2,4 @@ build/
 *.nro
 *.nacp
 *.elf
+.DS_Store

@@ -21,6 +21,37 @@ the stock library unless you pass `ALLOW_STOCK_FFMPEG=1`. FFmpeg is configured w
 `--enable-gpl` and without `--enable-nonfree`, so the resulting `.nro` can be distributed under
 the GPL.
 
+## Building on macOS (Docker)
+
+devkitPro's macOS installer is not needed, and it was a dead end when tried (the `pacman`
+database signature check failed with "GPGME error: Invalid crypto engine" on the host). Build
+inside the devkitPro image instead; nothing gets installed on the Mac:
+
+```sh
+tools/docker-build.sh     # -> SwitchAirCast.nro (first run also builds the patched FFmpeg)
+```
+
+Notes learned the hard way:
+
+- **Use the native architecture.** `devkitpro/devkita64` has an arm64 variant. Forcing
+  `--platform linux/amd64` on Apple Silicon works but runs under emulation and the FFmpeg build
+  was several times slower. The script does not pass `--platform`.
+- **Check the Docker context first.** If `docker info` fails with a missing socket, a stale
+  context (e.g. from an uninstalled OrbStack) is selected: `docker context ls`, then
+  `docker context use desktop-linux` (or `default`). Docker Desktop must be running.
+- **Inside the image the package manager is `dkp-pacman`**; the host installer installs it as
+  `pacman` under `/opt/devkitpro/pacman/bin`, which is a different setup.
+- **Rebuilds are incremental.** `build/ffmpeg-switch` is kept, so later runs only run `make`.
+  Delete `build/ffmpeg-switch` and `build/ffmpeg-src` to rebuild FFmpeg (for example after
+  changing `patches/ffmpeg-*.patch`).
+- **Package upgrades.** Each run upgrades the image's devkitPro packages first, so builds can
+  change from run to run. `DKP_SYNC=0 tools/docker-build.sh` skips it (offline or repeatable
+  rebuilds).
+- The container builds as root; on exit the script hands `build/` and `SwitchAirCast.*` back to
+  your user, so a Linux host does not end up with root-owned files.
+- The resulting `.nro` built cleanly from this setup (22.9 MB) but has not been run on a console.
+  Test on real hardware before releasing.
+
 ## Desktop build for testing
 
 A Linux build runs the same receiver in a window, which makes protocol and UI work possible
