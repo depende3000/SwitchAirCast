@@ -66,9 +66,9 @@ texts in `source/i18n.c` talk about "this Switch".
 ## Changes to the vendored UxPlay library
 
 The list of changes is in [DEVELOPING.md](DEVELOPING.md#changes-to-uxplays-library). Here is
-each one by whether it depends on the Switch. The repository has a single commit that adds
-`lib/airplay/`, so its history cannot show which lines differ from UxPlay's; this sorting is
-from reading the code.
+each one by whether it depends on the Switch. The repository's history cannot show which lines
+differ from UxPlay's, because `lib/airplay/` was added in one commit; diff it against UxPlay
+commit `4e95a9e` for that. This sorting is from reading the code.
 
 **Switch-specific** (guarded by `__SWITCH__`, or only needed there):
 

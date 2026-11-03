@@ -104,6 +104,11 @@ build/linux/fake_sender 127.0.0.1 7000 10 --audio
 
 Which of these depend on the Switch, and what else is Switch-only: [SWITCH_ONLY.md](SWITCH_ONLY.md).
 
+The library is based on [UxPlay](https://github.com/FDH2/UxPlay) commit `4e95a9e` (2026-10-16),
+found by comparing files, since the import was not recorded. To review later upstream changes,
+diff `lib/` in UxPlay from that commit. Upstream fixes ported since then are marked
+`SwitchAirCast: upstream <commit>` in the code.
+
 - `crypto.c` is rewritten on mbedtls and libsodium (UxPlay uses OpenSSL, which devkitPro does
   not ship). Its output matches the OpenSSL version byte for byte (`tests/crypto_test.c`).
 - `srp.c` is a new SRP-6a verifier on mbedtls bignums (Apple's variant: SHA-1, the RFC 5054
@@ -126,6 +131,17 @@ Which of these depend on the Switch, and what else is Switch-only: [SWITCH_ONLY.
   close that channel and break the playlist transfer for AirPlay video.
 - `raop_hls_export_playlists()` hands the player the playlists the library would otherwise serve
   on `http://localhost:<port>`, so the Switch does not need loopback networking.
+- Ported from upstream (through `b1be2bd`, 2026-11-02):
+  - The HTTP server checks its 60-second idle timeout before `select()`, so dead connections are
+    closed and a closed one is not read. Unlike upstream, the reverse (PTTH) channel is exempt,
+    because it is quiet whenever the receiver asks nothing. Its run mutex is now initialized.
+  - NTP: the client's full 64-bit timestamp is echoed back (it was cut to 32 bits), and the
+    clock conversions work once the first offset is known (they always returned 0).
+  - `byteutils.c`, `dnssd.c` and `utils.c` are upstream's current versions: no unaligned
+    pointer reads, no signed shift into bit 31, and 64-bit nanosecond constants.
+  - Not taken: upstream's rewrite of the reverse-HTTP (EVENT) parser (`3fda790`), which can be
+    crashed by a malformed `Content-Length`, a header shorter than 15 bytes, or a second
+    `/reverse` request.
 
 ### Media player notes
 

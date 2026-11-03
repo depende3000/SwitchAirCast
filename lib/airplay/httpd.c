@@ -196,6 +196,8 @@ httpd_init(logger_t *logger, httpd_callbacks_t *callbacks, int nohold)
     /* Initial status joined */
     httpd->running = 0;
     httpd->joined = 1;
+    /* SwitchAirCast: from upstream 3fda790; it was never initialized */
+    MUTEX_CREATE(httpd->run_mutex);
 
     return httpd;
 }
@@ -205,6 +207,7 @@ httpd_destroy(httpd_t *httpd)
 {
     if (httpd) {
         httpd_stop(httpd);
+        MUTEX_DESTROY(httpd->run_mutex);
         free(httpd->connections);
         free(httpd);
     }
@@ -384,6 +387,7 @@ httpd_thread(void *arg)
         struct timeval tv;
         int nfds = 0;
         int nfds_set = 0;
+        time_t now = time(NULL);
 
         MUTEX_LOCK(httpd->run_mutex);
         if (!httpd->running) {
@@ -421,6 +425,18 @@ httpd_thread(void *arg)
                 httpd_remove_connection(httpd, &httpd->connections[i], 0);
                 continue;
             }
+            /* SwitchAirCast: from upstream 3fda790, the timeout is checked here, before select(). It was
+               checked only for connections that had data, so a dead one was never closed, and a live one
+               was closed and then read anyway. The reverse (PTTH) channel is exempt: the client only
+               answers there, so it is quiet whenever the receiver asks nothing. */
+            if (httpd->connections[i].type != CONNECTION_TYPE_PTTH &&
+                now - httpd->connections[i].last_active > timeout_limit) {
+                logger_log(httpd->logger, LOGGER_WARNING,
+                           "httpd closing dead connection on socket %d after timeout_limit = %d seconds of inactivity",
+                            httpd->connections[i].socket_fd, timeout_limit);
+                httpd_remove_connection(httpd, &httpd->connections[i], 0);
+                continue;
+            }
             socket_fd = httpd->connections[i].socket_fd;
             FD_SET(socket_fd, &rfds);
             if (nfds <= socket_fd) {
@@ -449,7 +465,6 @@ httpd_thread(void *arg)
                 continue;
             }
         }
-        time_t now = time(NULL);
         if (httpd->open_connections < httpd->max_connections &&
             httpd->server_fd6 != -1 && FD_ISSET(httpd->server_fd6, &rfds)) {
             int ret = httpd_accept_connection(httpd, httpd->server_fd6, 1);
@@ -469,12 +484,6 @@ httpd_thread(void *arg)
             }
             if (!FD_ISSET(connection->socket_fd, &rfds)) {
                 continue;
-            }
-            if (now - connection->last_active > timeout_limit) {
-                logger_log(httpd->logger, LOGGER_WARNING,
-                           "httpd closing dead connection on socket %d after timeout_limit = %d seconds of inactivity",
-                            connection->socket_fd, timeout_limit);
-                httpd_remove_connection(httpd, connection, 0);
             }
             /* If not in the middle of request, allocate one */
             if (!connection->request) {

@@ -46,7 +46,7 @@
 #define CAST
 #endif
 
-#define SECOND_IN_NSECS 1000000000UL
+#define SECOND_IN_NSECS 1000000000ULL
 #define SEC SECOND_IN_NSECS
 /* a 4K IDR frame is a few MB; anything far beyond is a corrupt length field */
 #define MAX_MIRROR_PAYLOAD (32 * 1024 * 1024)
